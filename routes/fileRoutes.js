@@ -18,5 +18,8 @@ router.get(
   authMiddleware,
   fileController.getFile
 );
-
+router.get(
+  "/share/:filename",
+  fileController.shareFile
+);
 module.exports = router;

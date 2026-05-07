@@ -130,3 +130,37 @@ exports.getFile = (req, res) => {
     }
   );
 };
+exports.shareFile = (req, res) => {
+  const filename = req.params.filename;
+
+  const filePath = path.join(
+    uploadsDir,
+    filename
+  );
+
+  db.query(
+    "SELECT * FROM files WHERE filename = ?",
+    [filename],
+    (err, rows) => {
+      if (err) {
+        return res.status(500).send("Database error");
+      }
+
+      if (rows.length === 0) {
+        return res.status(404).send("File not found");
+      }
+
+      const file = rows[0];
+
+      if (file.visibility !== "public") {
+        return res.status(403).send("Private file cannot be shared");
+      }
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).send("File missing from uploads folder");
+      }
+
+      res.sendFile(filePath);
+    }
+  );
+};
