@@ -92,3 +92,37 @@ exports.login = (req, res) => {
     }
   );
 };
+exports.register = async (req, res) => {
+  const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({
+      message: "Name, email, and password are required",
+    });
+  }
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    db.query(
+      "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
+      [name, email, hashedPassword, "user"],
+      (err) => {
+        if (err) {
+          return res.status(500).json({
+            error: err.message,
+          });
+        }
+
+        res.json({
+          message: "✅ User created by Super Admin",
+          role: "user",
+        });
+      }
+    );
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+    });
+  }
+};

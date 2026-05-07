@@ -3,6 +3,7 @@ const router = express.Router();
 
 const authController = require("../controllers/authController");
 const authMiddleware = require("../middleware/authMiddleware");
+const { isSuperAdmin } = require("../middleware/roleMiddleware");
 
 router.get("/", authController.testAuth);
 
@@ -18,4 +19,10 @@ router.get(
 
 router.post("/login", authController.login);
 
+router.post(
+  "/register",
+  authMiddleware,
+  isSuperAdmin,
+  authController.register
+);
 module.exports = router;
