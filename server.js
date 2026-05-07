@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const authRoutes = require("./routes/authRoutes");
+const loggerMiddleware = require("./middleware/loggerMiddleware");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
@@ -12,6 +13,7 @@ const db = require("./config/db");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(loggerMiddleware);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/auth", authRoutes);
