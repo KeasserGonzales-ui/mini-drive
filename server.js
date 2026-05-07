@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const authRoutes = require("./routes/authRoutes");
 const fileRoutes = require("./routes/fileRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 const loggerMiddleware = require("./middleware/loggerMiddleware");
 const multer = require("multer");
 const path = require("path");
@@ -17,8 +18,10 @@ const PORT = process.env.PORT || 3000;
 app.use(loggerMiddleware);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
 app.use("/auth", authRoutes);
 app.use("/files", fileRoutes);
+app.use("/api/admin", adminRoutes);
 
 const publicDir = path.join(__dirname, "public");
 const uploadsDir = path.join(__dirname, "uploads");

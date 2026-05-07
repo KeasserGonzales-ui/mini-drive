@@ -14,22 +14,19 @@ exports.helloAuth = (req, res) => {
 };
 
 exports.loginTest = (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({
-      message: "❌ Email and password are required",
-    });
-  }
+  const { email } = req.body;
 
   const token = jwt.sign(
-    { email },
+    {
+      email,
+      role: "test",
+    },
     process.env.JWT_SECRET,
     { expiresIn: "1h" }
   );
 
   res.json({
-    message: "✅ Login successful",
+    message: "✅ Login test successful",
     token,
   });
 };
@@ -44,31 +41,35 @@ exports.profile = (req, res) => {
 exports.login = (req, res) => {
   const { email, password } = req.body;
 
+  if (!email || !password) {
+    return res.status(400).json({
+      message: "Email and password are required",
+    });
+  }
+
   db.query(
-    "SELECT * FROM users WHERE email = ?",
+    "SELECT id, name, email, password, role FROM users WHERE email = ?",
     [email],
     async (err, results) => {
       if (err) {
         return res.status(500).json({
+          message: "Login query failed",
           error: err.message,
         });
       }
 
       if (results.length === 0) {
-        return res.json({
+        return res.status(404).json({
           message: "User not found",
         });
       }
 
       const user = results[0];
 
-      const match = await bcrypt.compare(
-        password,
-        user.password
-      );
+      const match = await bcrypt.compare(password, user.password);
 
       if (!match) {
-        return res.json({
+        return res.status(401).json({
           message: "Wrong password",
         });
       }
@@ -76,22 +77,28 @@ exports.login = (req, res) => {
       const token = jwt.sign(
         {
           id: user.id,
+          name: user.name,
           email: user.email,
           role: user.role,
-          name: user.name,
         },
         process.env.JWT_SECRET,
         { expiresIn: "1h" }
       );
 
       res.json({
-        message: "Login OK",
+        message: "Login successful",
         token,
-        user,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
       });
     }
   );
 };
+
 exports.register = async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -107,21 +114,28 @@ exports.register = async (req, res) => {
     db.query(
       "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
       [name, email, hashedPassword, "user"],
-      (err) => {
+      (err, result) => {
         if (err) {
           return res.status(500).json({
+            message: "Register failed",
             error: err.message,
           });
         }
 
-        res.json({
-          message: "✅ User created by Super Admin",
-          role: "user",
+        res.status(201).json({
+          message: "User registered successfully",
+          user: {
+            id: result.insertId,
+            name,
+            email,
+            role: "user",
+          },
         });
       }
     );
   } catch (error) {
     res.status(500).json({
+      message: "Server error",
       error: error.message,
     });
   }
