@@ -164,3 +164,71 @@ exports.shareFile = (req, res) => {
     }
   );
 };
+exports.deleteFile = (req, res) => {
+  const filename = req.params.filename;
+
+  const filePath = path.join(
+    uploadsDir,
+    filename
+  );
+
+  const isAdminUser =
+    req.user.role === "admin" ||
+    req.user.role === "superadmin";
+
+  const selectSql = isAdminUser
+    ? "SELECT * FROM files WHERE filename = ?"
+    : "SELECT * FROM files WHERE filename = ? AND user_id = ?";
+
+  const selectParams = isAdminUser
+    ? [filename]
+    : [filename, req.user.id];
+
+  db.query(
+    selectSql,
+    selectParams,
+    (err, results) => {
+      if (err) {
+        console.error(
+          "Database select error:",
+          err
+        );
+
+        return res.status(500).json({
+          message: "Database select error",
+        });
+      }
+
+      if (results.length === 0) {
+        return res.status(403).json({
+          message: "You cannot delete this file",
+        });
+      }
+
+      db.query(
+        "DELETE FROM files WHERE filename = ?",
+        [filename],
+        (err) => {
+          if (err) {
+            console.error(
+              "Database delete error:",
+              err
+            );
+
+            return res.status(500).json({
+              message: "Database delete error",
+            });
+          }
+
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+
+          res.json({
+            message: "✅ File deleted successfully",
+          });
+        }
+      );
+    }
+  );
+};

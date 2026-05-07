@@ -131,63 +131,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-app.post("/delete/:filename", verifyToken, (req, res) => {
-  deleteFile(req, res, true);
-});
-
-app.delete("/delete/:filename", verifyToken, (req, res) => {
-  deleteFile(req, res, false);
-});
-
-function deleteFile(req, res, redirectMode) {
-  const filename = req.params.filename;
-  const filePath = path.join(uploadsDir, filename);
-  const isAdminUser = isAdminRole(req.user);
-
-  const selectSql = isAdminUser
-    ? "SELECT * FROM files WHERE filename = ?"
-    : "SELECT * FROM files WHERE filename = ? AND user_id = ?";
-
-  const selectParams = isAdminUser ? [filename] : [filename, req.user.id];
-
-  db.query(selectSql, selectParams, (err, results) => {
-    if (err) {
-      console.error("Database select error:", err);
-      return res.status(500).json({ message: "Database select error" });
-    }
-
-    if (results.length === 0) {
-      return res.status(403).json({ message: "You cannot delete this file" });
-    }
-
-    const file = results[0];
-    const originalName = file.original_name || filename;
-
-    db.query("DELETE FROM files WHERE filename = ?", [filename], (err) => {
-      if (err) {
-        console.error("Database delete error:", err);
-        return res.status(500).json({ message: "Database delete error" });
-      }
-
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-
-      logActivity(
-        req.user,
-        "DELETE",
-        originalName,
-        `Deleted file: ${originalName}`
-      );
-
-      if (redirectMode) {
-        return res.redirect("/drive.html");
-      }
-
-      res.json({ message: "File deleted successfully" });
-    });
-  });
-}
 
 app.get("/api/admin/test", verifyToken, isSuperAdmin, (req, res) => {
   res.json({

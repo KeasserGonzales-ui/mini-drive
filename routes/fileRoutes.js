@@ -22,4 +22,9 @@ router.get(
   "/share/:filename",
   fileController.shareFile
 );
+router.delete(
+  "/delete/:filename",
+  authMiddleware,
+  fileController.deleteFile
+);
 module.exports = router;
