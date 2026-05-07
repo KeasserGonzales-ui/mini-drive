@@ -13,4 +13,10 @@ router.post(
   fileController.uploadFile
 );
 
+router.get(
+  "/:filename",
+  authMiddleware,
+  fileController.getFile
+);
+
 module.exports = router;

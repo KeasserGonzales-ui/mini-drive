@@ -76,3 +76,57 @@ exports.uploadFile = (req, res) => {
     }
   );
 };
+exports.getFile = (req, res) => {
+  const filename = req.params.filename;
+
+  const filePath = path.join(
+    uploadsDir,
+    filename
+  );
+
+  db.query(
+    "SELECT * FROM files WHERE filename = ?",
+    [filename],
+    (err, rows) => {
+      if (err) {
+        return res
+          .status(500)
+          .send("Database error");
+      }
+
+      if (rows.length === 0) {
+        return res
+          .status(404)
+          .send("File not found");
+      }
+
+      const file = rows[0];
+
+      const isOwner =
+        Number(file.user_id) ===
+        Number(req.user.id);
+
+      const isAdminUser =
+        req.user.role === "admin" ||
+        req.user.role === "superadmin";
+
+      if (
+        file.visibility === "public" ||
+        isOwner ||
+        isAdminUser
+      ) {
+        if (!fs.existsSync(filePath)) {
+          return res
+            .status(404)
+            .send("File missing from uploads folder");
+        }
+
+        return res.sendFile(filePath);
+      }
+
+      return res
+        .status(403)
+        .send("Access denied");
+    }
+  );
+};

@@ -132,40 +132,6 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
-app.get("/file/:filename", verifyToken, (req, res) => {
-  const filename = req.params.filename;
-  const filePath = path.join(uploadsDir, filename);
-
-  db.query("SELECT * FROM files WHERE filename = ?", [filename], (err, rows) => {
-    if (err) return res.status(500).send("Database error");
-
-    if (rows.length === 0) {
-      return res.status(404).send("File not found");
-    }
-
-    const file = rows[0];
-    const isOwner = Number(file.user_id) === Number(req.user.id);
-    const isAdminUser = isAdminRole(req.user);
-
-    if (file.visibility === "public" || isOwner || isAdminUser) {
-      if (!fs.existsSync(filePath)) {
-        return res.status(404).send("File missing from uploads folder");
-      }
-
-      logActivity(
-        req.user,
-        "DOWNLOAD",
-        file.original_name || filename,
-        `Downloaded/accessed file: ${file.original_name || filename}`
-      );
-
-      return res.sendFile(filePath);
-    }
-
-    return res.status(403).send("Access denied");
-  });
-});
-
 app.get("/share/:filename", (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(uploadsDir, filename);
