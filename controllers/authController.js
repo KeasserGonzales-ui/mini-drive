@@ -1,4 +1,6 @@
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const db = require("../config/db");
 
 exports.testAuth = (req, res) => {
   res.send("✅ Auth Controller Working");
@@ -31,9 +33,62 @@ exports.loginTest = (req, res) => {
     token,
   });
 };
+
 exports.profile = (req, res) => {
   res.json({
     message: "🔐 Protected profile accessed",
     user: req.user,
   });
+};
+
+exports.login = (req, res) => {
+  const { email, password } = req.body;
+
+  db.query(
+    "SELECT * FROM users WHERE email = ?",
+    [email],
+    async (err, results) => {
+      if (err) {
+        return res.status(500).json({
+          error: err.message,
+        });
+      }
+
+      if (results.length === 0) {
+        return res.json({
+          message: "User not found",
+        });
+      }
+
+      const user = results[0];
+
+      const match = await bcrypt.compare(
+        password,
+        user.password
+      );
+
+      if (!match) {
+        return res.json({
+          message: "Wrong password",
+        });
+      }
+
+      const token = jwt.sign(
+        {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          name: user.name,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
+
+      res.json({
+        message: "Login OK",
+        token,
+        user,
+      });
+    }
+  );
 };

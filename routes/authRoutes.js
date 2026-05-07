@@ -10,6 +10,12 @@ router.get("/hello", authController.helloAuth);
 
 router.post("/login-test", authController.loginTest);
 
-router.get("/profile", authMiddleware, authController.profile);
+router.get(
+  "/profile",
+  authMiddleware,
+  authController.profile
+);
+
+router.post("/login", authController.login);
 
 module.exports = router;
