@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Register | Mini Drive Pro</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="login-page">
+
+  <div class="login-card">
+    <h1>📝 Register</h1>
+    <p>Create your account</p>
+
+    <form id="registerForm">
+      <label>Name</label>
+      <input type="text" id="name" placeholder="Enter name" required />
+
+      <label>Email</label>
+      <input type="email" id="email" placeholder="Enter email" required />
+
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Enter password" required />
+
+      <!-- Optional role (for testing admin system) -->
+      <label>Role</label>
+      <select id="role">
+        <option value="user">User</option>
+        <option value="admin">Admin</option>
+        <option value="superadmin">Super Admin</option>
+      </select>
+
+      <button type="submit">Register</button>
+    </form>
+
+    <p style="margin-top:15px; font-size:14px;">
+      Already have an account?
+      <a href="/login.html" style="color:#4ade80;">Login</a>
+    </p>
+
+    <div id="message" class="message"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById("registerForm");
+    const message = document.getElementById("message");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      message.textContent = "Registering...";
+
+      const name = document.getElementById("name").value;
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const role = document.getElementById("role").value;
+
+      try {
+        const res = await fetch("/register", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ name, email, password, role })
+        });
+
+        const data = await res.json();
+
+        if (data.message === "User registered") {
+          message.textContent = "✅ Registered successfully! Redirecting...";
+          
+          setTimeout(() => {
+            window.location.href = "/login.html";
+          }, 1500);
+        } else {
+          message.textContent = data.message || "Registration failed";
+        }
+
+      } catch (err) {
+        message.textContent = "Server error";
+      }
+    });
+  </script>
+
+</body>
+</html>

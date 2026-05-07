@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mini Drive Pro</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h2>🗂️ Drive</h2>
+      <a href="/drive.html" class="active">📁 My Files</a>
+      <a href="/admin.html" id="adminLink">🛡️ Admin Panel</a>
+      <button id="logoutBtn">🚪 Logout</button>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <h1>Mini Google Drive</h1>
+          <p id="userInfo"></p>
+        </div>
+        <div class="admin-badge">Secure File Manager</div>
+      </div>
+
+      <div id="toast" style="
+        display:none;
+        position:fixed;
+        top:20px;
+        right:20px;
+        background:#22c55e;
+        color:white;
+        padding:14px 18px;
+        border-radius:12px;
+        font-weight:bold;
+        z-index:9999;
+        box-shadow:0 10px 30px rgba(0,0,0,0.35);
+      "></div>
+
+      <div class="top-controls">
+        <div class="panel upload-panel">
+          <h2>📤 Upload File</h2>
+
+          <form id="uploadForm" enctype="multipart/form-data">
+            <input type="file" id="fileInput" name="file" required />
+
+            <select id="visibilityInput" name="visibility">
+              <option value="private">🔒 Private</option>
+              <option value="public">🌍 Public</option>
+            </select>
+
+            <button type="submit">Upload</button>
+          </form>
+
+          <div id="uploadStatus" class="status"></div>
+        </div>
+
+        <div class="panel search-panel">
+          <h2>🔍 Search & Filter</h2>
+
+          <div class="search-controls">
+            <input type="text" id="searchInput" placeholder="Search files..." />
+
+            <select id="filterVisibility">
+              <option value="all">All Files</option>
+              <option value="public">🌍 Public</option>
+              <option value="private">🔒 Private</option>
+            </select>
+
+            <select id="sortOrder">
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>📁 Files</h2>
+        <div id="status" class="status">Loading...</div>
+        <div class="file-grid" id="filesGrid"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/auth.js"></script>
+
+  <script>
+    const token = requireLogin();
+    const user = getUser();
+
+    const filesGrid = document.getElementById("filesGrid");
+    const statusBox = document.getElementById("status");
+    const uploadStatus = document.getElementById("uploadStatus");
+    const toast = document.getElementById("toast");
+
+    document.getElementById("userInfo").textContent =
+      "Logged in as " + (user.name || user.email) + " (" + user.role + ")";
+
+    if (!["admin", "superadmin"].includes(user.role)) {
+      document.getElementById("adminLink").style.display = "none";
+    }
+
+    document.getElementById("logoutBtn").onclick = logout;
+
+    function showToast(message, type = "success") {
+      toast.textContent = message;
+      toast.style.display = "block";
+      toast.style.background = type === "error" ? "#ef4444" : "#22c55e";
+
+      setTimeout(() => {
+        toast.style.display = "none";
+      }, 2500);
+    }
+
+    function isImage(filename) {
+      return /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
+    }
+
+    function getDate(file) {
+      return file.uploaded_date || "No date";
+    }
+
+    function getVisibilityBadge(visibility) {
+      return visibility === "public" ? "🌍 Public" : "🔒 Private";
+    }
+
+    async function copyLink(filename) {
+      const link = window.location.origin + "/share/" + filename;
+
+      try {
+        await navigator.clipboard.writeText(link);
+        showToast("✅ Share link copied!");
+      } catch (err) {
+        prompt("Copy this share link:", link);
+      }
+    }
+
+    async function loadFiles() {
+      const search = encodeURIComponent(document.getElementById("searchInput").value.trim());
+      const visibility = document.getElementById("filterVisibility").value;
+      const sort = document.getElementById("sortOrder").value;
+
+      const url = `/api/admin/files?search=${search}&visibility=${visibility}&sort=${sort}`;
+
+      const res = await fetch(url, {
+        headers: { Authorization: "Bearer " + token },
+      });
+
+      const files = await res.json();
+
+      filesGrid.innerHTML = "";
+
+      if (!res.ok) {
+        statusBox.textContent = files.message || files.error || "Failed to load files.";
+        return;
+      }
+
+      if (files.length === 0) {
+        statusBox.textContent = "No files found.";
+        return;
+      }
+
+      statusBox.textContent = "Loaded ✅";
+
+      files.forEach(file => {
+        const encoded = encodeURIComponent(file.filename);
+
+        const canDelete =
+          Number(file.user_id) === Number(user.id) ||
+          ["admin", "superadmin"].includes(user.role);
+
+        const ownerText =
+          Number(file.user_id) === Number(user.id)
+            ? "You"
+            : file.owner_name || file.owner_email || "Unknown owner";
+
+        const card = document.createElement("div");
+        card.className = "file-card-ui";
+
+        card.innerHTML = `
+          ${
+            isImage(file.filename)
+              ? `<img src="/file/${encoded}?token=${token}" class="file-preview">`
+              : `<div class="file-icon-ui">📄</div>`
+          }
+
+          <h3>${file.original_name || file.filename}</h3>
+          <p>👤 ${ownerText}</p>
+          <p>🕒 ${getDate(file)}</p>
+          <p>${getVisibilityBadge(file.visibility)}</p>
+
+          <div class="file-actions">
+            <a href="/file/${encoded}?token=${token}" download>
+              <button type="button">⬇ Download</button>
+            </a>
+
+            ${
+              file.visibility === "public"
+                ? `<button type="button" onclick="copyLink('${encoded}')">🔗 Share</button>`
+                : `<span style="font-size:12px;opacity:0.75;">🔒 No public link</span>`
+            }
+
+            ${
+              canDelete
+                ? `<button type="button" class="delete" onclick="deleteFile('${encoded}')">🗑 Delete</button>`
+                : ""
+            }
+          </div>
+        `;
+
+        filesGrid.appendChild(card);
+      });
+    }
+
+    let searchTimer;
+
+    document.getElementById("searchInput").addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadFiles, 300);
+    });
+
+    document.getElementById("filterVisibility").addEventListener("change", loadFiles);
+    document.getElementById("sortOrder").addEventListener("change", loadFiles);
+
+    async function deleteFile(filename) {
+      if (!confirm("Delete file?")) return;
+
+      const res = await fetch("/delete/" + filename, {
+        method: "DELETE",
+        headers: { Authorization: "Bearer " + token },
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        showToast(data.message || "Delete failed", "error");
+        return;
+      }
+
+      showToast("✅ File deleted");
+      loadFiles();
+    }
+
+    document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const selectedFile = document.getElementById("fileInput").files[0];
+
+      if (!selectedFile) {
+        uploadStatus.textContent = "Please choose a file.";
+        return;
+      }
+
+      uploadStatus.textContent = "Uploading...";
+
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("visibility", document.getElementById("visibilityInput").value);
+
+      const res = await fetch("/upload?token=" + token, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        uploadStatus.textContent = data.message || "Upload failed.";
+        showToast("Upload failed", "error");
+        return;
+      }
+
+      document.getElementById("fileInput").value = "";
+      uploadStatus.textContent = "Upload successful ✅";
+      showToast("✅ File uploaded");
+      loadFiles();
+    });
+
+    loadFiles();
+  </script>
+</body>
+</html>

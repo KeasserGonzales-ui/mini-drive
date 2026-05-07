@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Panel</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h2>🛡️ Admin</h2>
+      <a href="/admin.html" class="active">📊 Dashboard</a>
+      <a href="/drive.html">📁 Drive</a>
+      <a href="#activityLogsPanel">🔐 Activity Logs</a>
+      <a href="/drive.html">⬅ Back to Drive</a>
+      <button id="logoutBtn" type="button">🚪 Logout</button>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <h1>Admin Panel</h1>
+          <p>Mini Drive Pro Management</p>
+        </div>
+        <div class="admin-badge" id="adminInfo">Checking login...</div>
+      </div>
+
+      <div id="toast" style="
+        display:none;
+        position:fixed;
+        top:20px;
+        right:20px;
+        background:#22c55e;
+        color:white;
+        padding:14px 18px;
+        border-radius:12px;
+        font-weight:bold;
+        z-index:9999;
+        box-shadow:0 10px 30px rgba(0,0,0,0.35);
+      "></div>
+
+      <div class="cards">
+        <div class="card">
+          <p>👥 Total Users</p>
+          <h2 id="totalUsers">0</h2>
+        </div>
+
+        <div class="card">
+          <p>📁 Total Files</p>
+          <h2 id="totalFiles">0</h2>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>➕ Create User</h2>
+        <div id="createStatus" class="status">Super Admin can create users here.</div>
+
+        <div class="form-row">
+          <input type="text" id="newName" placeholder="Name" />
+          <input type="email" id="newEmail" placeholder="Email" />
+          <input type="password" id="newPassword" placeholder="Password" />
+          <button type="button" onclick="createUser()">Create User</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>👥 User Management</h2>
+        <div id="status" class="status">Loading admin data...</div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Change Role</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="usersTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>🔍 File Search & Filter</h2>
+
+        <div class="form-row">
+          <input type="text" id="fileSearchInput" placeholder="Search file name, owner, or email..." />
+
+          <select id="fileVisibilityFilter">
+            <option value="all">All Files</option>
+            <option value="public">🌍 Public</option>
+            <option value="private">🔒 Private</option>
+          </select>
+
+          <select id="fileSortOrder">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>📁 File Management</h2>
+        <div id="fileStatus" class="status">Loading files...</div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>File Name</th>
+                <th>Owner</th>
+                <th>Email</th>
+                <th>Visibility</th>
+                <th>Uploaded</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="filesTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="activityLogsPanel">
+        <h2>🔐 Activity Logs</h2>
+        <div id="logsStatus" class="status">
+          Superadmin monitoring logs loading...
+        </div>
+
+        <div class="form-row">
+          <input type="text" id="logsSearchInput" placeholder="Search action, user, email, file, details..." />
+
+          <select id="logsActionFilter">
+            <option value="all">All Actions</option>
+            <option value="LOGIN">LOGIN</option>
+            <option value="UPLOAD">UPLOAD</option>
+            <option value="DOWNLOAD">DOWNLOAD</option>
+            <option value="DELETE">DELETE</option>
+            <option value="ROLE_UPDATE">ROLE_UPDATE</option>
+            <option value="CREATE_USER">CREATE_USER</option>
+            <option value="DELETE_USER">DELETE_USER</option>
+          </select>
+
+          <button type="button" onclick="loadActivityLogs()">Refresh Logs</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date / Time</th>
+                <th>User</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Action</th>
+                <th>File</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="logsTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="/auth.js"></script>
+
+  <script>
+    const auth = requireAdmin();
+
+    if (!auth) {
+      throw new Error("Not authorized");
+    }
+
+    const { token, user } = auth;
+
+    checkTokenOrLogout();
+
+    const statusBox = document.getElementById("status");
+    const fileStatus = document.getElementById("fileStatus");
+    const logsStatus = document.getElementById("logsStatus");
+    const createStatus = document.getElementById("createStatus");
+
+    const usersTable = document.getElementById("usersTable");
+    const filesTable = document.getElementById("filesTable");
+    const logsTable = document.getElementById("logsTable");
+
+    const logoutBtn = document.getElementById("logoutBtn");
+    const adminInfo = document.getElementById("adminInfo");
+    const toast = document.getElementById("toast");
+
+    const fileSearchInput = document.getElementById("fileSearchInput");
+    const fileVisibilityFilter = document.getElementById("fileVisibilityFilter");
+    const fileSortOrder = document.getElementById("fileSortOrder");
+
+    const logsSearchInput = document.getElementById("logsSearchInput");
+    const logsActionFilter = document.getElementById("logsActionFilter");
+
+    let allLogs = [];
+
+    adminInfo.textContent =
+      "Logged in as " + (user.name || user.email) + " | Role: " + user.role;
+
+    logoutBtn.onclick = function () {
+      logout();
+    };
+
+    function showToast(message, type = "success") {
+      toast.textContent = message;
+      toast.style.display = "block";
+      toast.style.background = type === "error" ? "#ef4444" : "#22c55e";
+
+      setTimeout(() => {
+        toast.style.display = "none";
+      }, 2500);
+    }
+
+    async function api(url, options = {}) {
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+          ...(options.headers || {}),
+        },
+      });
+
+      if (res.status === 401 || res.status === 403) {
+        const data = await res.clone().json().catch(() => ({}));
+        showToast(data.message || "Not allowed", "error");
+      }
+
+      return res;
+    }
+
+    function getVisibilityBadge(visibility) {
+      return visibility === "public" ? "🌍 Public" : "🔒 Private";
+    }
+
+    function getUploadedDate(file) {
+      if (file.uploaded_date) return file.uploaded_date;
+
+      if (file.uploaded_at) {
+        return new Date(file.uploaded_at).toLocaleString("en-PH", {
+          year: "numeric",
+          month: "long",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+
+      return "No upload date";
+    }
+
+    function getActionBadge(action) {
+      const colors = {
+        LOGIN: "#38bdf8",
+        UPLOAD: "#22c55e",
+        DOWNLOAD: "#a78bfa",
+        DELETE: "#ef4444",
+        ROLE_UPDATE: "#facc15",
+        CREATE_USER: "#34d399",
+        DELETE_USER: "#fb7185",
+      };
+
+      return `
+        <span style="
+          display:inline-block;
+          padding:6px 10px;
+          border-radius:999px;
+          font-weight:800;
+          font-size:12px;
+          color:#020617;
+          background:${colors[action] || "#cbd5e1"};
+        ">
+          ${action || "UNKNOWN"}
+        </span>
+      `;
+    }
+
+    async function copyShareLink(filename) {
+      const link = window.location.origin + "/share/" + filename;
+
+      try {
+        await navigator.clipboard.writeText(link);
+        showToast("✅ Share link copied!");
+      } catch (err) {
+        prompt("Copy this share link:", link);
+      }
+    }
+
+    async function loadStats() {
+      const res = await api("/api/admin/stats");
+      const data = await res.json();
+
+      if (!res.ok) {
+        statusBox.textContent = data.message || data.error || "Failed to load stats";
+        return;
+      }
+
+      document.getElementById("totalUsers").textContent = data.totalUsers;
+      document.getElementById("totalFiles").textContent = data.totalFiles;
+    }
+
+    async function loadUsers() {
+      const res = await api("/api/admin/users");
+      const users = await res.json();
+
+      if (!res.ok) {
+        statusBox.textContent = users.message || users.error || "Failed to load users";
+        return;
+      }
+
+      usersTable.innerHTML = "";
+
+      users.forEach((u) => {
+        const tr = document.createElement("tr");
+        const isSuperAdmin = u.role === "superadmin";
+
+        tr.innerHTML = `
+          <td>${u.id}</td>
+          <td>${u.name || ""}</td>
+          <td>${u.email}</td>
+          <td class="role">${u.role}</td>
+          <td>
+            ${
+              isSuperAdmin
+                ? `<span>🔒 Locked</span>`
+                : `
+                  <select id="role-${u.id}">
+                    <option value="user" ${u.role === "user" ? "selected" : ""}>user</option>
+                    <option value="admin" ${u.role === "admin" ? "selected" : ""}>admin</option>
+                  </select>
+                  <button type="button" onclick="updateRole(${u.id})">Save</button>
+                `
+            }
+          </td>
+          <td>
+            ${
+              isSuperAdmin
+                ? `<span>🔒 Protected</span>`
+                : `<button type="button" class="delete" onclick="deleteUser(${u.id})">Delete</button>`
+            }
+          </td>
+        `;
+
+        usersTable.appendChild(tr);
+      });
+
+      statusBox.textContent = "Admin user data loaded successfully ✅";
+    }
+
+    async function loadFiles() {
+      const search = encodeURIComponent(fileSearchInput.value.trim());
+      const visibility = fileVisibilityFilter.value;
+      const sort = fileSortOrder.value;
+
+      const res = await api(
+        `/api/admin/files?search=${search}&visibility=${visibility}&sort=${sort}`
+      );
+
+      const files = await res.json();
+
+      if (!res.ok) {
+        fileStatus.textContent = files.message || files.error || "Failed to load files";
+        return;
+      }
+
+      filesTable.innerHTML = "";
+
+      if (files.length === 0) {
+        fileStatus.textContent = "No files found.";
+        return;
+      }
+
+      files.forEach((file) => {
+        const encodedFile = encodeURIComponent(file.filename);
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td>${file.id}</td>
+          <td>${file.original_name || file.filename}</td>
+          <td>${file.owner_name || "Unknown owner"}</td>
+          <td>${file.owner_email || ""}</td>
+          <td>${getVisibilityBadge(file.visibility)}</td>
+          <td>${getUploadedDate(file)}</td>
+          <td>
+            <a href="/file/${encodedFile}?token=${token}" download>
+              <button type="button">Download</button>
+            </a>
+
+            ${
+              file.visibility === "public"
+                ? `<button type="button" onclick="copyShareLink('${encodedFile}')">Share</button>`
+                : `<span style="font-size:12px;opacity:0.7;">🔒 Private</span>`
+            }
+
+            <button type="button" class="delete" onclick="deleteFile('${encodedFile}')">
+              Delete
+            </button>
+          </td>
+        `;
+
+        filesTable.appendChild(tr);
+      });
+
+      fileStatus.textContent = "Admin file data loaded successfully ✅";
+    }
+
+    function renderActivityLogs() {
+      const search = logsSearchInput.value.trim().toLowerCase();
+      const actionFilter = logsActionFilter.value;
+
+      const filteredLogs = allLogs.filter((log) => {
+        const matchesAction =
+          actionFilter === "all" || log.action === actionFilter;
+
+        const text = `
+          ${log.username || ""}
+          ${log.email || ""}
+          ${log.role || ""}
+          ${log.action || ""}
+          ${log.file_name || ""}
+          ${log.details || ""}
+          ${log.activity_date || ""}
+        `.toLowerCase();
+
+        const matchesSearch = text.includes(search);
+
+        return matchesAction && matchesSearch;
+      });
+
+      logsTable.innerHTML = "";
+
+      if (filteredLogs.length === 0) {
+        logsStatus.textContent = "No activity logs found.";
+        return;
+      }
+
+      filteredLogs.forEach((log) => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td>${log.activity_date || log.created_at || ""}</td>
+          <td>${log.username || "Unknown"}</td>
+          <td>${log.email || ""}</td>
+          <td class="role">${log.role || ""}</td>
+          <td>${getActionBadge(log.action)}</td>
+          <td>${log.file_name || "-"}</td>
+          <td>${log.details || "-"}</td>
+        `;
+
+        logsTable.appendChild(tr);
+      });
+
+      logsStatus.textContent =
+        `Monitoring loaded successfully ✅ Showing ${filteredLogs.length} of ${allLogs.length} logs`;
+    }
+
+    async function loadActivityLogs() {
+      const res = await api("/api/activity-logs");
+      const logs = await res.json();
+
+      if (!res.ok) {
+        logsStatus.textContent = logs.message || logs.error || "Failed to load activity logs";
+        showToast(logsStatus.textContent, "error");
+        return;
+      }
+
+      allLogs = Array.isArray(logs) ? logs : [];
+      renderActivityLogs();
+    }
+
+    let searchTimer;
+    let logsSearchTimer;
+
+    fileSearchInput.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadFiles, 300);
+    });
+
+    fileVisibilityFilter.addEventListener("change", loadFiles);
+    fileSortOrder.addEventListener("change", loadFiles);
+
+    logsSearchInput.addEventListener("input", () => {
+      clearTimeout(logsSearchTimer);
+      logsSearchTimer = setTimeout(renderActivityLogs, 200);
+    });
+
+    logsActionFilter.addEventListener("change", renderActivityLogs);
+
+    async function createUser() {
+      const name = document.getElementById("newName").value.trim();
+      const email = document.getElementById("newEmail").value.trim();
+      const password = document.getElementById("newPassword").value.trim();
+
+      if (!name || !email || !password) {
+        showToast("Please fill in all fields.", "error");
+        return;
+      }
+
+      const res = await api("/register", {
+        method: "POST",
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        createStatus.textContent = data.message || data.error || "Failed to create user";
+        showToast(createStatus.textContent, "error");
+        return;
+      }
+
+      createStatus.textContent = data.message || "✅ User created";
+      showToast("✅ User created");
+
+      document.getElementById("newName").value = "";
+      document.getElementById("newEmail").value = "";
+      document.getElementById("newPassword").value = "";
+
+      await loadStats();
+      await loadUsers();
+      await loadActivityLogs();
+    }
+
+    async function updateRole(userId) {
+      const role = document.getElementById("role-" + userId).value;
+
+      if (!confirm("Change this user's role to: " + role + "?")) {
+        await loadUsers();
+        return;
+      }
+
+      const res = await api("/api/admin/users/" + userId + "/role", {
+        method: "PUT",
+        body: JSON.stringify({ role }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        statusBox.textContent = data.message || data.error || "Role update failed";
+        showToast(statusBox.textContent, "error");
+        await loadUsers();
+        return;
+      }
+
+      statusBox.textContent = "✅ Role successfully changed to: " + role;
+      showToast("✅ Role updated");
+
+      await loadStats();
+      await loadUsers();
+      await loadActivityLogs();
+    }
+
+    async function deleteUser(userId) {
+      if (!confirm("Are you sure you want to delete this user?")) return;
+
+      const res = await api("/api/admin/users/" + userId, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        statusBox.textContent = data.message || data.error || "Delete failed";
+        showToast(statusBox.textContent, "error");
+        return;
+      }
+
+      showToast(data.message || "User deleted");
+
+      await loadStats();
+      await loadUsers();
+      await loadFiles();
+      await loadActivityLogs();
+    }
+
+    async function deleteFile(filename) {
+      if (!confirm("Delete this file?")) return;
+
+      const res = await fetch("/delete/" + filename, {
+        method: "DELETE",
+        headers: {
+          Authorization: "Bearer " + token,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        fileStatus.textContent = data.message || data.error || "Delete failed";
+        showToast(fileStatus.textContent, "error");
+        return;
+      }
+
+      fileStatus.textContent = "File deleted successfully ✅";
+      showToast("✅ File deleted");
+
+      await loadStats();
+      await loadFiles();
+      await loadActivityLogs();
+    }
+
+    loadStats();
+    loadUsers();
+    loadFiles();
+    loadActivityLogs();
+  </script>
+</body>
+</html>

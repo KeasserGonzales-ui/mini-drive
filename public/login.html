@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login | Mini Drive Pro</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="login-page">
+  <div class="login-card">
+    <h1>🗂️ Mini Drive Pro</h1>
+    <p>Login to continue</p>
+
+    <form id="loginForm">
+      <label>Email</label>
+      <input type="email" id="email" placeholder="Enter email" required />
+
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Enter password" required />
+
+      <button type="submit">Login</button>
+    </form>
+
+    <div id="message" class="message"></div>
+  </div>
+
+  <script>
+    const loginForm = document.getElementById("loginForm");
+    const message = document.getElementById("message");
+
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      message.textContent = "Logging in...";
+
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+
+      try {
+        const res = await fetch("/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ email, password }),
+        });
+
+        const data = await res.json();
+
+        if (!data.token) {
+          message.textContent = data.message || "Login failed";
+          return;
+        }
+
+        // ✅ Save token + user
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+
+        // 🔥 FIXED REDIRECT LOGIC
+        if (data.user.role === "superadmin" || data.user.role === "admin") {
+          window.location.href = "/admin.html";
+        } else {
+          window.location.href = "/drive.html";
+        }
+
+      } catch (error) {
+        message.textContent = "Server error. Please try again.";
+      }
+    });
+  </script>
+</body>
+</html>
