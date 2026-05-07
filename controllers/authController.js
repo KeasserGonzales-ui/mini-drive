@@ -1,3 +1,5 @@
+const jwt = require("jsonwebtoken");
+
 exports.testAuth = (req, res) => {
   res.send("✅ Auth Controller Working");
 };
@@ -18,9 +20,14 @@ exports.loginTest = (req, res) => {
     });
   }
 
+  const token = jwt.sign(
+    { email },
+    process.env.JWT_SECRET,
+    { expiresIn: "1h" }
+  );
+
   res.json({
-    message: "✅ POST request working",
-    email,
-    password,
+    message: "✅ Login successful",
+    token,
   });
 };
