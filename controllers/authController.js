@@ -31,3 +31,9 @@ exports.loginTest = (req, res) => {
     token,
   });
 };
+exports.profile = (req, res) => {
+  res.json({
+    message: "🔐 Protected profile accessed",
+    user: req.user,
+  });
+};
