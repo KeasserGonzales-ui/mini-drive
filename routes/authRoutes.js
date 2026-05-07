@@ -7,4 +7,6 @@ router.get("/", authController.testAuth);
 
 router.get("/hello", authController.helloAuth);
 
+router.post("/login-test", authController.loginTest);
+
 module.exports = router;

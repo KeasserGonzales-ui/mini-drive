@@ -8,3 +8,13 @@ exports.helloAuth = (req, res) => {
     status: "success",
   });
 };
+
+exports.loginTest = (req, res) => {
+  const { email, password } = req.body;
+
+  res.json({
+    message: "✅ POST request working",
+    email,
+    password,
+  });
+};
