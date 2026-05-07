@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const authRoutes = require("./routes/authRoutes");
+const fileRoutes = require("./routes/fileRoutes");
 const loggerMiddleware = require("./middleware/loggerMiddleware");
 const multer = require("multer");
 const path = require("path");
@@ -17,6 +18,7 @@ app.use(loggerMiddleware);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/auth", authRoutes);
+app.use("/files", fileRoutes);
 
 const publicDir = path.join(__dirname, "public");
 const uploadsDir = path.join(__dirname, "uploads");
