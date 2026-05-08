@@ -2,11 +2,12 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const db = require("../config/db");
+const logActivity = require("../utils/activityLogger");
 
 const uploadsDir = path.join(__dirname, "../uploads");
 
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
+  fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -16,7 +17,7 @@ const storage = multer.diskStorage({
 
   filename: (req, file, cb) => {
     const safeName = file.originalname.replace(/\s+/g, "-");
-    cb(null, Date.now() + "-" + safeName);
+    cb(null, `${Date.now()}-${safeName}`);
   },
 });
 
@@ -64,6 +65,16 @@ exports.uploadFile = (req, res) => {
         });
       }
 
+      logActivity({
+        user_id: req.user.id,
+        username: req.user.name || req.user.username,
+        email: req.user.email,
+        role: req.user.role,
+        action: "UPLOAD_FILE",
+        file_name: req.file.filename,
+        details: `Uploaded ${req.file.originalname} as ${visibility}`,
+      });
+
       res.json({
         message: "✅ Upload successful",
         visibility,
@@ -82,6 +93,7 @@ exports.getFile = (req, res) => {
     [filename],
     (err, rows) => {
       if (err) {
+        console.error("Database error:", err);
         return res.status(500).send("Database error");
       }
 
@@ -91,22 +103,15 @@ exports.getFile = (req, res) => {
 
       const file = rows[0];
 
-      const isOwner =
-        Number(file.user_id) === Number(req.user.id);
+      const isOwner = Number(file.user_id) === Number(req.user.id);
 
       const isAdminUser =
         req.user.role === "admin" ||
         req.user.role === "superadmin";
 
-      if (
-        file.visibility === "public" ||
-        isOwner ||
-        isAdminUser
-      ) {
+      if (file.visibility === "public" || isOwner || isAdminUser) {
         if (!fs.existsSync(filePath)) {
-          return res
-            .status(404)
-            .send("File missing from uploads folder");
+          return res.status(404).send("File missing from uploads folder");
         }
 
         return res.sendFile(filePath);
@@ -126,6 +131,7 @@ exports.shareFile = (req, res) => {
     [filename],
     (err, rows) => {
       if (err) {
+        console.error("Database error:", err);
         return res.status(500).send("Database error");
       }
 
@@ -136,18 +142,14 @@ exports.shareFile = (req, res) => {
       const file = rows[0];
 
       if (file.visibility !== "public") {
-        return res
-          .status(403)
-          .send("Private file cannot be shared");
+        return res.status(403).send("Private file cannot be shared");
       }
 
       if (!fs.existsSync(filePath)) {
-        return res
-          .status(404)
-          .send("File missing from uploads folder");
+        return res.status(404).send("File missing from uploads folder");
       }
 
-      res.sendFile(filePath);
+      return res.sendFile(filePath);
     }
   );
 };
@@ -183,6 +185,8 @@ exports.deleteFile = (req, res) => {
       });
     }
 
+    const file = results[0];
+
     db.query(
       "DELETE FROM files WHERE filename = ?",
       [filename],
@@ -198,6 +202,16 @@ exports.deleteFile = (req, res) => {
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
+
+        logActivity({
+          user_id: req.user.id,
+          username: req.user.name || req.user.username,
+          email: req.user.email,
+          role: req.user.role,
+          action: "DELETE_FILE",
+          file_name: filename,
+          details: `Deleted file owned by user_id ${file.user_id}`,
+        });
 
         res.json({
           message: "✅ File deleted successfully",

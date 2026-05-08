@@ -22,6 +22,7 @@
           <h1>Mini Google Drive</h1>
           <p id="userInfo"></p>
         </div>
+
         <div class="admin-badge">Secure File Manager</div>
       </div>
 
@@ -128,7 +129,7 @@
     }
 
     async function copyLink(filename) {
-      const link = window.location.origin + "/share/" + filename;
+      const link = window.location.origin + "/files/share/" + filename;
 
       try {
         await navigator.clipboard.writeText(link);
@@ -138,15 +139,54 @@
       }
     }
 
+    async function downloadFile(filename, originalName) {
+      try {
+        const res = await fetch("/files/" + filename, {
+          headers: {
+            Authorization: "Bearer " + token,
+          },
+        });
+
+        if (!res.ok) {
+          showToast("Download failed", "error");
+          return;
+        }
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = originalName || decodeURIComponent(filename);
+
+        document.body.appendChild(a);
+        a.click();
+
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        showToast("✅ Download started");
+      } catch (error) {
+        console.error(error);
+        showToast("Download error", "error");
+      }
+    }
+
     async function loadFiles() {
-      const search = encodeURIComponent(document.getElementById("searchInput").value.trim());
+      const search = encodeURIComponent(
+        document.getElementById("searchInput").value.trim()
+      );
+
       const visibility = document.getElementById("filterVisibility").value;
       const sort = document.getElementById("sortOrder").value;
 
-      const url = `/api/admin/files?search=${search}&visibility=${visibility}&sort=${sort}`;
+      const url =
+        `/api/admin/files?search=${search}&visibility=${visibility}&sort=${sort}`;
 
       const res = await fetch(url, {
-        headers: { Authorization: "Bearer " + token },
+        headers: {
+          Authorization: "Bearer " + token,
+        },
       });
 
       const files = await res.json();
@@ -154,7 +194,8 @@
       filesGrid.innerHTML = "";
 
       if (!res.ok) {
-        statusBox.textContent = files.message || files.error || "Failed to load files.";
+        statusBox.textContent =
+          files.message || files.error || "Failed to load files.";
         return;
       }
 
@@ -165,8 +206,9 @@
 
       statusBox.textContent = "Loaded ✅";
 
-      files.forEach(file => {
+      files.forEach((file) => {
         const encoded = encodeURIComponent(file.filename);
+        const safeOriginalName = (file.original_name || file.filename).replace(/'/g, "\\'");
 
         const canDelete =
           Number(file.user_id) === Number(user.id) ||
@@ -183,7 +225,7 @@
         card.innerHTML = `
           ${
             isImage(file.filename)
-              ? `<img src="/file/${encoded}?token=${token}" class="file-preview">`
+              ? `<img src="/files/${encoded}?token=${token}" class="file-preview">`
               : `<div class="file-icon-ui">📄</div>`
           }
 
@@ -193,9 +235,9 @@
           <p>${getVisibilityBadge(file.visibility)}</p>
 
           <div class="file-actions">
-            <a href="/file/${encoded}?token=${token}" download>
-              <button type="button">⬇ Download</button>
-            </a>
+            <button type="button" onclick="downloadFile('${encoded}', '${safeOriginalName}')">
+              ⬇ Download
+            </button>
 
             ${
               file.visibility === "public"
@@ -228,9 +270,11 @@
     async function deleteFile(filename) {
       if (!confirm("Delete file?")) return;
 
-      const res = await fetch("/delete/" + filename, {
+      const res = await fetch("/files/delete/" + filename, {
         method: "DELETE",
-        headers: { Authorization: "Bearer " + token },
+        headers: {
+          Authorization: "Bearer " + token,
+        },
       });
 
       const data = await res.json().catch(() => ({}));
@@ -260,8 +304,11 @@
       formData.append("file", selectedFile);
       formData.append("visibility", document.getElementById("visibilityInput").value);
 
-      const res = await fetch("/upload?token=" + token, {
+      const res = await fetch("/files/upload", {
         method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+        },
         body: formData,
       });
 

@@ -2,21 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
   <title>Login | Mini Drive Pro</title>
+
   <link rel="stylesheet" href="/style.css" />
 </head>
+
 <body class="login-page">
   <div class="login-card">
     <h1>🗂️ Mini Drive Pro</h1>
+
     <p>Login to continue</p>
 
     <form id="loginForm">
       <label>Email</label>
-      <input type="email" id="email" placeholder="Enter email" required />
+
+      <input
+        type="email"
+        id="email"
+        placeholder="Enter email"
+        required
+      />
 
       <label>Password</label>
-      <input type="password" id="password" placeholder="Enter password" required />
+
+      <input
+        type="password"
+        id="password"
+        placeholder="Enter password"
+        required
+      />
 
       <button type="submit">Login</button>
     </form>
@@ -37,34 +57,44 @@
       const password = document.getElementById("password").value;
 
       try {
-        const res = await fetch("/login", {
+        const response = await fetch("/auth/login", {
           method: "POST",
+
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ email, password }),
+
+          body: JSON.stringify({
+            email,
+            password,
+          }),
         });
 
-        const data = await res.json();
+        const data = await response.json();
 
         if (!data.token) {
-          message.textContent = data.message || "Login failed";
+          message.textContent = data.message || "❌ Login failed";
           return;
         }
 
-        // ✅ Save token + user
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
 
-        // 🔥 FIXED REDIRECT LOGIC
-        if (data.user.role === "superadmin" || data.user.role === "admin") {
-          window.location.href = "/admin.html";
-        } else {
-          window.location.href = "/drive.html";
-        }
+        message.textContent = "✅ Login successful";
 
+        setTimeout(() => {
+          if (
+            data.user.role === "superadmin" ||
+            data.user.role === "admin"
+          ) {
+            window.location.href = "/admin.html";
+          } else {
+            window.location.href = "/drive.html";
+          }
+        }, 500);
       } catch (error) {
-        message.textContent = "Server error. Please try again.";
+        console.error(error);
+        message.textContent = "❌ Server error";
       }
     });
   </script>

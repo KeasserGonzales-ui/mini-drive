@@ -4,9 +4,7 @@ const router = express.Router();
 const fileController = require("../controllers/fileController");
 const authMiddleware = require("../middleware/authMiddleware");
 
-const {
-  isSuperAdmin,
-} = require("../middleware/roleMiddleware");
+const { isSuperAdmin } = require("../middleware/roleMiddleware");
 
 router.get("/", fileController.testFileController);
 
@@ -15,12 +13,6 @@ router.post(
   authMiddleware,
   fileController.uploadMiddleware,
   fileController.uploadFile
-);
-
-router.get(
-  "/:filename",
-  authMiddleware,
-  fileController.getFile
 );
 
 router.get(
@@ -33,6 +25,12 @@ router.delete(
   authMiddleware,
   isSuperAdmin,
   fileController.deleteFile
+);
+
+router.get(
+  "/:filename",
+  authMiddleware,
+  fileController.getFile
 );
 
 module.exports = router;

@@ -1,30 +1,36 @@
-const jwt = require("jsonwebtoken");
+const express = require("express");
+const router = express.Router();
 
-const authMiddleware = (req, res, next) => {
-  const authHeader = req.headers.authorization;
+const fileController = require("../controllers/fileController");
+const authMiddleware = require("../middleware/authMiddleware");
 
-  if (!authHeader) {
-    return res.status(401).json({
-      message: "❌ No token provided",
-    });
-  }
+const { isSuperAdmin } = require("../middleware/roleMiddleware");
 
-  try {
-    const token = authHeader.split(" ")[1];
+router.get("/", fileController.testFileController);
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
+router.post(
+  "/upload",
+  authMiddleware,
+  fileController.uploadMiddleware,
+  fileController.uploadFile
+);
 
-    req.user = decoded;
+router.get(
+  "/share/:filename",
+  fileController.shareFile
+);
 
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      message: "❌ Invalid token",
-    });
-  }
-};
+router.delete(
+  "/delete/:filename",
+  authMiddleware,
+  isSuperAdmin,
+  fileController.deleteFile
+);
 
-module.exports = authMiddleware;
+router.get(
+  "/:filename",
+  authMiddleware,
+  fileController.getFile
+);
+
+module.exports = router;
