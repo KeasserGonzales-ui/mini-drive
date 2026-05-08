@@ -1,16 +1,18 @@
 require("dotenv").config();
 
 const express = require("express");
+const path = require("path");
+const fs = require("fs");
+const jwt = require("jsonwebtoken");
+const db = require("./config/db");
+
 const authRoutes = require("./routes/authRoutes");
 const fileRoutes = require("./routes/fileRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const userRoutes = require("./routes/userRoutes");
+
 const loggerMiddleware = require("./middleware/loggerMiddleware");
-const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const db = require("./config/db");
+const { isSuperAdmin } = require("./middleware/roleMiddleware");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -19,10 +21,6 @@ app.use(loggerMiddleware);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/auth", authRoutes);
-app.use("/files", fileRoutes);
-app.use("/api/admin", adminRoutes);
-
 const publicDir = path.join(__dirname, "public");
 const uploadsDir = path.join(__dirname, "uploads");
 
@@ -30,6 +28,11 @@ if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir);
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 
 app.use(express.static(publicDir));
+
+app.use("/auth", authRoutes);
+app.use("/files", fileRoutes);
+app.use("/users", userRoutes);
+app.use("/api/admin", adminRoutes);
 
 function ensureUploadedAtColumn() {
   db.query(
@@ -58,9 +61,6 @@ function ensureUploadedAtColumn() {
   );
 }
 
-/* =========================
-   ACTIVITY LOG AUTOMATION
-========================= */
 function logActivity(user, action, fileName = null, details = null) {
   if (!user) return;
 
@@ -99,41 +99,28 @@ const verifyToken = (req, res, next) => {
   }
 
   if (!authHeader) {
-    return res.status(403).json({ message: "No token provided" });
+    return res.status(403).json({
+      message: "No token provided",
+    });
   }
 
   const token = authHeader.split(" ")[1];
 
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(401).json({ message: "Invalid token" });
+    if (err) {
+      return res.status(401).json({
+        message: "Invalid token",
+      });
+    }
+
     req.user = decoded;
     next();
   });
 };
 
-const isSuperAdmin = (req, res, next) => {
-  if (req.user.role !== "superadmin") {
-    return res.status(403).json({ message: "Super Admin only" });
-  }
-  next();
-};
-
 function isAdminRole(user) {
   return user.role === "admin" || user.role === "superadmin";
 }
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const safeName = file.originalname.replace(/\s+/g, "-");
-    cb(null, Date.now() + "-" + safeName);
-  },
-});
-
-const upload = multer({ storage });
-
 
 app.get("/api/admin/test", verifyToken, isSuperAdmin, (req, res) => {
   res.json({
@@ -172,7 +159,9 @@ app.put("/api/admin/users/:id/role", verifyToken, isSuperAdmin, (req, res) => {
   const role = req.body.role;
 
   if (!userId) {
-    return res.status(400).json({ message: "Invalid user ID" });
+    return res.status(400).json({
+      message: "Invalid user ID",
+    });
   }
 
   if (!["user", "admin"].includes(role)) {
@@ -181,82 +170,103 @@ app.put("/api/admin/users/:id/role", verifyToken, isSuperAdmin, (req, res) => {
     });
   }
 
-  db.query("SELECT id, name, email, role FROM users WHERE id = ?", [userId], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const targetUser = rows[0];
-    const oldRole = targetUser.role;
-
-    if (oldRole === "superadmin") {
-      return res.status(403).json({
-        message: "❌ Cannot change Super Admin role",
-      });
-    }
-
-    db.query("UPDATE users SET role = ? WHERE id = ?", [role, userId], (err, result) => {
+  db.query(
+    "SELECT id, name, email, role FROM users WHERE id = ?",
+    [userId],
+    (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
 
-      logActivity(
-        req.user,
-        "ROLE_UPDATE",
-        null,
-        `Changed ${targetUser.email} role from ${oldRole} to ${role}`
-      );
+      if (rows.length === 0) {
+        return res.status(404).json({
+          message: "User not found",
+        });
+      }
 
-      res.json({
-        message: "✅ User role updated successfully",
-        userId,
-        role,
-        affectedRows: result.affectedRows,
-        changedRows: result.changedRows,
-      });
-    });
-  });
+      const targetUser = rows[0];
+      const oldRole = targetUser.role;
+
+      if (oldRole === "superadmin") {
+        return res.status(403).json({
+          message: "❌ Cannot change Super Admin role",
+        });
+      }
+
+      db.query(
+        "UPDATE users SET role = ? WHERE id = ?",
+        [role, userId],
+        (err, result) => {
+          if (err) return res.status(500).json({ error: err.message });
+
+          logActivity(
+            req.user,
+            "ROLE_UPDATE",
+            null,
+            `Changed ${targetUser.email} role from ${oldRole} to ${role}`
+          );
+
+          res.json({
+            message: "✅ User role updated successfully",
+            userId,
+            role,
+            affectedRows: result.affectedRows,
+            changedRows: result.changedRows,
+          });
+        }
+      );
+    }
+  );
 });
 
 app.delete("/api/admin/users/:id", verifyToken, isSuperAdmin, (req, res) => {
   const userId = Number(req.params.id);
 
   if (userId === Number(req.user.id)) {
-    return res.status(400).json({ message: "You cannot delete your own account" });
+    return res.status(400).json({
+      message: "You cannot delete your own account",
+    });
   }
 
-  db.query("SELECT id, name, email, role FROM users WHERE id = ?", [userId], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const targetUser = rows[0];
-
-    if (targetUser.role === "superadmin") {
-      return res.status(403).json({
-        message: "❌ Cannot delete Super Admin account",
-      });
-    }
-
-    db.query("DELETE FROM files WHERE user_id = ?", [userId], (err) => {
+  db.query(
+    "SELECT id, name, email, role FROM users WHERE id = ?",
+    [userId],
+    (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
 
-      db.query("DELETE FROM users WHERE id = ?", [userId], (err) => {
+      if (rows.length === 0) {
+        return res.status(404).json({
+          message: "User not found",
+        });
+      }
+
+      const targetUser = rows[0];
+
+      if (targetUser.role === "superadmin") {
+        return res.status(403).json({
+          message: "❌ Cannot delete Super Admin account",
+        });
+      }
+
+      db.query("DELETE FROM files WHERE user_id = ?", [userId], (err) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        logActivity(
-          req.user,
-          "DELETE_USER",
-          null,
-          `Deleted user account: ${targetUser.email}`
-        );
+        db.query("DELETE FROM users WHERE id = ?", [userId], (err) => {
+          if (err) return res.status(500).json({ error: err.message });
 
-        res.json({ message: "User deleted", userId });
+          logActivity(
+            req.user,
+            "DELETE_USER",
+            null,
+            `Deleted user account: ${targetUser.email}`
+          );
+
+          res.json({
+            message: "User deleted",
+            userId,
+          });
+        });
       });
-    });
-  });
+    }
+  );
 });
 
 app.get("/api/admin/files", verifyToken, (req, res) => {
@@ -291,8 +301,21 @@ app.get("/api/admin/files", verifyToken, (req, res) => {
   }
 
   if (search !== "") {
-    sql += " AND (files.original_name LIKE ? OR files.filename LIKE ? OR users.name LIKE ? OR users.email LIKE ?)";
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    sql += `
+      AND (
+        files.original_name LIKE ?
+        OR files.filename LIKE ?
+        OR users.name LIKE ?
+        OR users.email LIKE ?
+      )
+    `;
+
+    params.push(
+      `%${search}%`,
+      `%${search}%`,
+      `%${search}%`,
+      `%${search}%`
+    );
   }
 
   if (visibility === "public" || visibility === "private") {
@@ -305,16 +328,15 @@ app.get("/api/admin/files", verifyToken, (req, res) => {
   db.query(sql, params, (err, rows) => {
     if (err) {
       console.error("Files query error:", err);
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({
+        error: err.message,
+      });
     }
 
     res.json(rows);
   });
 });
 
-/* =========================
-   SUPERADMIN ONLY LOGS API
-========================= */
 app.get("/api/activity-logs", verifyToken, isSuperAdmin, (req, res) => {
   db.query(
     `
@@ -336,7 +358,9 @@ app.get("/api/activity-logs", verifyToken, isSuperAdmin, (req, res) => {
     (err, rows) => {
       if (err) {
         console.error("Activity logs query error:", err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({
+          error: err.message,
+        });
       }
 
       res.json(rows);
@@ -361,15 +385,19 @@ app.get("/debug/files", verifyToken, (req, res) => {
 });
 
 app.get("/debug/users", verifyToken, isSuperAdmin, (req, res) => {
-  db.query("SELECT id, name, email, role FROM users ORDER BY id DESC", (err, rows) => {
-    if (err) return res.json({ error: err.message });
-    res.json(rows);
-  });
+  db.query(
+    "SELECT id, name, email, role FROM users ORDER BY id DESC",
+    (err, rows) => {
+      if (err) return res.json({ error: err.message });
+      res.json(rows);
+    }
+  );
 });
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📁 Public folder: ${publicDir}`);
   console.log(`📁 Uploads folder: ${uploadsDir}`);
+
   ensureUploadedAtColumn();
 });
