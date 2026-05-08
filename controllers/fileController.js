@@ -16,7 +16,6 @@ const storage = multer.diskStorage({
 
   filename: (req, file, cb) => {
     const safeName = file.originalname.replace(/\s+/g, "-");
-
     cb(null, Date.now() + "-" + safeName);
   },
 });
@@ -40,10 +39,7 @@ exports.uploadFile = (req, res) => {
 
   let visibility = req.body.visibility;
 
-  if (
-    visibility !== "public" &&
-    visibility !== "private"
-  ) {
+  if (visibility !== "public" && visibility !== "private") {
     visibility = "private";
   }
 
@@ -76,35 +72,27 @@ exports.uploadFile = (req, res) => {
     }
   );
 };
+
 exports.getFile = (req, res) => {
   const filename = req.params.filename;
-
-  const filePath = path.join(
-    uploadsDir,
-    filename
-  );
+  const filePath = path.join(uploadsDir, filename);
 
   db.query(
     "SELECT * FROM files WHERE filename = ?",
     [filename],
     (err, rows) => {
       if (err) {
-        return res
-          .status(500)
-          .send("Database error");
+        return res.status(500).send("Database error");
       }
 
       if (rows.length === 0) {
-        return res
-          .status(404)
-          .send("File not found");
+        return res.status(404).send("File not found");
       }
 
       const file = rows[0];
 
       const isOwner =
-        Number(file.user_id) ===
-        Number(req.user.id);
+        Number(file.user_id) === Number(req.user.id);
 
       const isAdminUser =
         req.user.role === "admin" ||
@@ -124,19 +112,14 @@ exports.getFile = (req, res) => {
         return res.sendFile(filePath);
       }
 
-      return res
-        .status(403)
-        .send("Access denied");
+      return res.status(403).send("Access denied");
     }
   );
 };
+
 exports.shareFile = (req, res) => {
   const filename = req.params.filename;
-
-  const filePath = path.join(
-    uploadsDir,
-    filename
-  );
+  const filePath = path.join(uploadsDir, filename);
 
   db.query(
     "SELECT * FROM files WHERE filename = ?",
@@ -153,24 +136,25 @@ exports.shareFile = (req, res) => {
       const file = rows[0];
 
       if (file.visibility !== "public") {
-        return res.status(403).send("Private file cannot be shared");
+        return res
+          .status(403)
+          .send("Private file cannot be shared");
       }
 
       if (!fs.existsSync(filePath)) {
-        return res.status(404).send("File missing from uploads folder");
+        return res
+          .status(404)
+          .send("File missing from uploads folder");
       }
 
       res.sendFile(filePath);
     }
   );
 };
+
 exports.deleteFile = (req, res) => {
   const filename = req.params.filename;
-
-  const filePath = path.join(
-    uploadsDir,
-    filename
-  );
+  const filePath = path.join(uploadsDir, filename);
 
   const isAdminUser =
     req.user.role === "admin" ||
@@ -184,51 +168,41 @@ exports.deleteFile = (req, res) => {
     ? [filename]
     : [filename, req.user.id];
 
-  db.query(
-    selectSql,
-    selectParams,
-    (err, results) => {
-      if (err) {
-        console.error(
-          "Database select error:",
-          err
-        );
+  db.query(selectSql, selectParams, (err, results) => {
+    if (err) {
+      console.error("Database select error:", err);
 
-        return res.status(500).json({
-          message: "Database select error",
-        });
-      }
+      return res.status(500).json({
+        message: "Database select error",
+      });
+    }
 
-      if (results.length === 0) {
-        return res.status(403).json({
-          message: "You cannot delete this file",
-        });
-      }
+    if (results.length === 0) {
+      return res.status(403).json({
+        message: "You cannot delete this file",
+      });
+    }
 
-      db.query(
-        "DELETE FROM files WHERE filename = ?",
-        [filename],
-        (err) => {
-          if (err) {
-            console.error(
-              "Database delete error:",
-              err
-            );
+    db.query(
+      "DELETE FROM files WHERE filename = ?",
+      [filename],
+      (err) => {
+        if (err) {
+          console.error("Database delete error:", err);
 
-            return res.status(500).json({
-              message: "Database delete error",
-            });
-          }
-
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
-
-          res.json({
-            message: "✅ File deleted successfully",
+          return res.status(500).json({
+            message: "Database delete error",
           });
         }
-      );
-    }
-  );
+
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+
+        res.json({
+          message: "✅ File deleted successfully",
+        });
+      }
+    );
+  });
 };
