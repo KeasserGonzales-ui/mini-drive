@@ -1,36 +1,35 @@
-const express = require("express");
-const router = express.Router();
+const jwt = require("jsonwebtoken");
 
-const fileController = require("../controllers/fileController");
-const authMiddleware = require("../middleware/authMiddleware");
+const authMiddleware = (req, res, next) => {
+  let token;
 
-const { isSuperAdmin } = require("../middleware/roleMiddleware");
+  const authHeader = req.headers.authorization;
 
-router.get("/", fileController.testFileController);
+  if (authHeader) {
+    token = authHeader.split(" ")[1];
+  }
 
-router.post(
-  "/upload",
-  authMiddleware,
-  fileController.uploadMiddleware,
-  fileController.uploadFile
-);
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
 
-router.get(
-  "/share/:filename",
-  fileController.shareFile
-);
+  if (!token) {
+    return res.status(401).json({
+      message: "No token provided",
+    });
+  }
 
-router.delete(
-  "/delete/:filename",
-  authMiddleware,
-  isSuperAdmin,
-  fileController.deleteFile
-);
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-router.get(
-  "/:filename",
-  authMiddleware,
-  fileController.getFile
-);
+    req.user = decoded;
 
-module.exports = router;
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      message: "Invalid or expired token",
+    });
+  }
+};
+
+module.exports = authMiddleware;

@@ -1,5 +1,6 @@
 require("dotenv").config();
 
+const cors = require("cors");
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
@@ -15,6 +16,7 @@ const loggerMiddleware = require("./middleware/loggerMiddleware");
 const { isSuperAdmin } = require("./middleware/roleMiddleware");
 
 const app = express();
+app.use(cors());
 const PORT = process.env.PORT || 3000;
 
 app.use(loggerMiddleware);

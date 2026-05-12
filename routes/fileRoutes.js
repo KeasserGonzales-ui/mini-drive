@@ -16,6 +16,19 @@ router.post(
 );
 
 router.get(
+  "/list",
+  authMiddleware,
+  fileController.getFiles
+);
+
+// NEW SHARE TO USER ROUTE
+router.post(
+  "/share",
+  authMiddleware,
+  fileController.shareFileToUser
+);
+
+router.get(
   "/share/:filename",
   fileController.shareFile
 );
