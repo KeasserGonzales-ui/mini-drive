@@ -12,6 +12,7 @@
     <aside class="sidebar">
       <h2>🗂️ Drive</h2>
       <a href="/drive.html" class="active">📁 My Files</a>
+      <a href="#sharedWithMePanel">🤝 Shared With Me</a>
       <a href="/admin.html" id="adminLink">🛡️ Admin Panel</a>
       <button id="logoutBtn">🚪 Logout</button>
     </aside>
@@ -79,9 +80,15 @@
       </div>
 
       <div class="panel">
-        <h2>📁 Files</h2>
+        <h2>📁 My Files</h2>
         <div id="status" class="status">Loading...</div>
         <div class="file-grid" id="filesGrid"></div>
+      </div>
+
+      <div class="panel" id="sharedWithMePanel">
+        <h2>🤝 Shared With Me</h2>
+        <div id="sharedStatus" class="status">Loading shared files...</div>
+        <div class="file-grid" id="sharedFilesGrid"></div>
       </div>
     </main>
   </div>
@@ -93,7 +100,10 @@
     const user = getUser();
 
     const filesGrid = document.getElementById("filesGrid");
+    const sharedFilesGrid = document.getElementById("sharedFilesGrid");
+
     const statusBox = document.getElementById("status");
+    const sharedStatus = document.getElementById("sharedStatus");
     const uploadStatus = document.getElementById("uploadStatus");
     const toast = document.getElementById("toast");
 
@@ -121,7 +131,19 @@
     }
 
     function getDate(file) {
-      return file.uploaded_date || "No date";
+      if (file.uploaded_date) return file.uploaded_date;
+
+      if (file.uploaded_at) {
+        return new Date(file.uploaded_at).toLocaleString("en-PH", {
+          year: "numeric",
+          month: "long",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+
+      return "No date";
     }
 
     function getVisibilityBadge(visibility) {
@@ -138,6 +160,80 @@
         prompt("Copy this share link:", link);
       }
     }
+
+    async function shareFileToUser(fileId) {
+  try {
+    const usersRes = await fetch("/users/shareable", {
+      headers: {
+        Authorization: "Bearer " + token,
+      },
+    });
+
+    const users = await usersRes.json();
+
+    if (!usersRes.ok) {
+      showToast("Failed to load users", "error");
+      return;
+    }
+
+    if (users.length === 0) {
+      showToast("No users available to share with", "error");
+      return;
+    }
+
+    const userList = users
+      .map((u, index) => `${index + 1}. ${u.name} (${u.email})`)
+      .join("\n");
+
+    const selected = prompt(
+      `Select user number:\n\n${userList}`
+    );
+
+    if (!selected) {
+      showToast("Share cancelled.", "error");
+      return;
+    }
+
+    const selectedIndex = Number(selected) - 1;
+
+    if (
+      isNaN(selectedIndex) ||
+      selectedIndex < 0 ||
+      selectedIndex >= users.length
+    ) {
+      showToast("Invalid selection", "error");
+      return;
+    }
+
+    const selectedUser = users[selectedIndex];
+
+    const res = await fetch("/files/share", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify({
+        fileId,
+        email: selectedUser.email,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      showToast(data.message || "Failed to share file", "error");
+      return;
+    }
+
+    showToast(
+      `✅ Shared with ${selectedUser.name}`
+    );
+  } catch (error) {
+    console.error(error);
+    showToast("Share failed", "error");
+  }
+}
 
     async function downloadFile(filename, originalName) {
       try {
@@ -189,7 +285,7 @@
         },
       });
 
-      const files = await res.json();
+      const files = await res.json().catch(() => []);
 
       filesGrid.innerHTML = "";
 
@@ -241,9 +337,13 @@
 
             ${
               file.visibility === "public"
-                ? `<button type="button" onclick="copyLink('${encoded}')">🔗 Share</button>`
+                ? `<button type="button" onclick="copyLink('${encoded}')">🔗 Public Link</button>`
                 : `<span style="font-size:12px;opacity:0.75;">🔒 No public link</span>`
             }
+
+            <button type="button" onclick="shareFileToUser(${file.id})">
+              🤝 Share to User
+            </button>
 
             ${
               canDelete
@@ -254,6 +354,59 @@
         `;
 
         filesGrid.appendChild(card);
+      });
+    }
+
+    async function loadSharedWithMe() {
+      const res = await fetch("/files/shared-with-me", {
+        headers: {
+          Authorization: "Bearer " + token,
+        },
+      });
+
+      const sharedFiles = await res.json().catch(() => []);
+
+      sharedFilesGrid.innerHTML = "";
+
+      if (!res.ok) {
+        sharedStatus.textContent =
+          sharedFiles.message || sharedFiles.error || "Failed to load shared files.";
+        return;
+      }
+
+      if (sharedFiles.length === 0) {
+        sharedStatus.textContent = "No files shared with you yet.";
+        return;
+      }
+
+      sharedStatus.textContent = "Shared files loaded ✅";
+
+      sharedFiles.forEach((file) => {
+        const encoded = encodeURIComponent(file.filename);
+        const safeOriginalName = (file.original_name || file.filename).replace(/'/g, "\\'");
+
+        const card = document.createElement("div");
+        card.className = "file-card-ui";
+
+        card.innerHTML = `
+          ${
+            isImage(file.filename)
+              ? `<img src="/files/${encoded}?token=${token}" class="file-preview">`
+              : `<div class="file-icon-ui">📄</div>`
+          }
+
+          <h3>${file.original_name || file.filename}</h3>
+          <p>👤 Shared by: ${file.shared_by || "Unknown"}</p>
+          <p>${getVisibilityBadge(file.visibility)}</p>
+
+          <div class="file-actions">
+            <button type="button" onclick="downloadFile('${encoded}', '${safeOriginalName}')">
+              ⬇ Download
+            </button>
+          </div>
+        `;
+
+        sharedFilesGrid.appendChild(card);
       });
     }
 
@@ -286,6 +439,7 @@
 
       showToast("✅ File deleted");
       loadFiles();
+      loadSharedWithMe();
     }
 
     document.getElementById("uploadForm").addEventListener("submit", async (e) => {
@@ -327,6 +481,7 @@
     });
 
     loadFiles();
+    loadSharedWithMe();
   </script>
 </body>
 </html>

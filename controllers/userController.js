@@ -16,6 +16,23 @@ const getUsers = (req, res) => {
   );
 };
 
+const getShareableUsers = (req, res) => {
+  db.query(
+    "SELECT id, name, email, role FROM users WHERE id != ? ORDER BY name ASC",
+    [req.user.id],
+    (err, rows) => {
+      if (err) {
+        return res.status(500).json({
+          message: "Error fetching shareable users",
+          error: err.message,
+        });
+      }
+
+      res.status(200).json(rows);
+    }
+  );
+};
+
 const deleteUser = (req, res) => {
   const userId = Number(req.params.id);
 
@@ -150,6 +167,7 @@ const updateUserRole = (req, res, newRole) => {
 
 module.exports = {
   getUsers,
+  getShareableUsers,
   deleteUser,
   promoteAdmin,
   demoteAdmin,

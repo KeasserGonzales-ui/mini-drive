@@ -9,10 +9,17 @@ const {
 
 const {
   getUsers,
+  getShareableUsers,
   deleteUser,
   promoteAdmin,
   demoteAdmin,
 } = require("../controllers/userController");
+
+router.get(
+  "/shareable",
+  authMiddleware,
+  getShareableUsers
+);
 
 router.get(
   "/",

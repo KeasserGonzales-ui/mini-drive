@@ -255,6 +255,40 @@ exports.shareFileToUser = (req, res) => {
   );
 };
 
+// GET FILES SHARED WITH CURRENT USER
+exports.getSharedWithMe = (req, res) => {
+  const currentUserId = req.user.id;
+
+  const sql = `
+    SELECT
+      shared_files.id,
+      files.id AS file_id,
+      files.filename,
+      files.original_name,
+      files.visibility,
+      users.name AS shared_by
+    FROM shared_files
+    JOIN files
+      ON shared_files.file_id = files.id
+    JOIN users
+      ON shared_files.owner_id = users.id
+    WHERE shared_files.shared_with_user_id = ?
+    ORDER BY shared_files.id DESC
+  `;
+
+  db.query(sql, [currentUserId], (err, results) => {
+    if (err) {
+      console.error("Shared files query error:", err);
+
+      return res.status(500).json({
+        message: "Shared files query error",
+      });
+    }
+
+    res.json(results);
+  });
+};
+
 exports.deleteFile = (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(uploadsDir, filename);

@@ -21,7 +21,14 @@ router.get(
   fileController.getFiles
 );
 
-// NEW SHARE TO USER ROUTE
+// GET FILES SHARED WITH CURRENT USER
+router.get(
+  "/shared-with-me",
+  authMiddleware,
+  fileController.getSharedWithMe
+);
+
+// SHARE FILE TO SPECIFIC USER
 router.post(
   "/share",
   authMiddleware,
