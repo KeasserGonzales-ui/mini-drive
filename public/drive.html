@@ -5,6 +5,105 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Mini Drive Pro</title>
   <link rel="stylesheet" href="/style.css" />
+
+  <style>
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      z-index: 9998;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-box {
+      width: 100%;
+      max-width: 420px;
+      background: #0f172a;
+      color: white;
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .modal-box h2 {
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+
+    .modal-box p {
+      opacity: 0.8;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+
+    .modal-box select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      margin-bottom: 16px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .modal-actions button {
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .modal-cancel {
+      background: #334155;
+      color: white;
+    }
+
+    .modal-share {
+      background: #22c55e;
+      color: white;
+    }
+
+    .folder-toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+
+    .folder-toolbar button {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .folder-path {
+      font-size: 14px;
+      opacity: 0.85;
+      margin-bottom: 12px;
+    }
+
+    .folder-card {
+      cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+
+    .folder-card:hover {
+      transform: translateY(-2px);
+      transition: 0.2s;
+    }
+  </style>
 </head>
 
 <body>
@@ -14,7 +113,7 @@
       <a href="/drive.html" class="active">📁 My Files</a>
       <a href="#sharedWithMePanel">🤝 Shared With Me</a>
       <a href="/admin.html" id="adminLink">🛡️ Admin Panel</a>
-      <button id="logoutBtn">🚪 Logout</button>
+      <button id="logoutBtn" type="button">🚪 Logout</button>
     </aside>
 
     <main class="main">
@@ -39,7 +138,30 @@
         font-weight:bold;
         z-index:9999;
         box-shadow:0 10px 30px rgba(0,0,0,0.35);
+        max-width: 520px;
+        word-break: break-word;
+        line-height: 1.4;
       "></div>
+
+      <div id="shareModal" class="modal-backdrop">
+        <div class="modal-box">
+          <h2>🤝 Share File</h2>
+          <p>Select a registered user to share this file with.</p>
+
+          <select id="shareUserSelect">
+            <option value="">Loading users...</option>
+          </select>
+
+          <div class="modal-actions">
+            <button type="button" class="modal-cancel" onclick="closeShareModal()">
+              Cancel
+            </button>
+            <button type="button" class="modal-share" onclick="confirmShareFile()">
+              Share
+            </button>
+          </div>
+        </div>
+      </div>
 
       <div class="top-controls">
         <div class="panel upload-panel">
@@ -81,7 +203,21 @@
 
       <div class="panel">
         <h2>📁 My Files</h2>
-        <div id="status" class="status">Loading...</div>
+
+        <div class="folder-toolbar">
+          <button type="button" onclick="createFolder()">➕ New Folder</button>
+          <button type="button" onclick="goRoot()">🏠 Root</button>
+          <button type="button" onclick="goBackFolder()" id="backFolderBtn">⬅ Back</button>
+        </div>
+
+        <div id="folderPath" class="folder-path">Current folder: Root</div>
+
+        <h3>📂 Folders</h3>
+        <div id="foldersStatus" class="status">Loading folders...</div>
+        <div class="file-grid" id="foldersGrid"></div>
+
+        <h3 style="margin-top:20px;">📄 Files</h3>
+        <div id="status" class="status">Loading files...</div>
         <div class="file-grid" id="filesGrid"></div>
       </div>
 
@@ -98,6 +234,12 @@
   <script>
     const token = requireLogin();
     const user = getUser();
+    const role = String(user.role || "").toLowerCase();
+
+    const foldersGrid = document.getElementById("foldersGrid");
+    const foldersStatus = document.getElementById("foldersStatus");
+    const folderPath = document.getElementById("folderPath");
+    const backFolderBtn = document.getElementById("backFolderBtn");
 
     const filesGrid = document.getElementById("filesGrid");
     const sharedFilesGrid = document.getElementById("sharedFilesGrid");
@@ -107,14 +249,34 @@
     const uploadStatus = document.getElementById("uploadStatus");
     const toast = document.getElementById("toast");
 
-    document.getElementById("userInfo").textContent =
-      "Logged in as " + (user.name || user.email) + " (" + user.role + ")";
+    const shareModal = document.getElementById("shareModal");
+    const shareUserSelect = document.getElementById("shareUserSelect");
 
-    if (!["admin", "superadmin"].includes(user.role)) {
+    let selectedShareFileId = null;
+    let shareableUsers = [];
+
+    let currentFolderId = "root";
+    let currentFolderName = "Root";
+    let folderStack = [];
+
+    document.getElementById("userInfo").textContent =
+      "Logged in as " + (user.name || user.email) + " (" + role + ")";
+
+    if (role !== "admin" && role !== "superadmin") {
       document.getElementById("adminLink").style.display = "none";
     }
 
-    document.getElementById("logoutBtn").onclick = logout;
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      sessionStorage.clear();
+      window.location.replace("/login.html");
+    });
+
+    function updateFolderUI() {
+      folderPath.textContent = "Current folder: " + currentFolderName;
+      backFolderBtn.style.display = currentFolderId === "root" ? "none" : "inline-block";
+    }
 
     function showToast(message, type = "success") {
       toast.textContent = message;
@@ -123,7 +285,7 @@
 
       setTimeout(() => {
         toast.style.display = "none";
-      }, 2500);
+      }, type === "error" ? 8000 : 2500);
     }
 
     function isImage(filename) {
@@ -150,6 +312,179 @@
       return visibility === "public" ? "🌍 Public" : "🔒 Private";
     }
 
+    async function createFolder() {
+      const name = prompt("Folder name:");
+
+      if (!name || !name.trim()) {
+        showToast("Folder name required", "error");
+        return;
+      }
+
+      try {
+        const res = await fetch("/folders/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + token,
+          },
+          body: JSON.stringify({
+            name: name.trim(),
+            parent_id: currentFolderId === "root" ? null : currentFolderId,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        console.log("CREATE FOLDER STATUS:", res.status);
+        console.log("CREATE FOLDER RESPONSE:", data);
+
+        if (!res.ok) {
+          const errorMessage =
+            data.message ||
+            data.error ||
+            "Failed to create folder";
+
+          showToast(errorMessage, "error");
+          alert(errorMessage);
+
+          return;
+        }
+
+        showToast("✅ Folder created");
+        await loadFolders();
+        await loadFiles();
+      } catch (error) {
+        console.error("CREATE FOLDER FETCH ERROR:", error);
+
+        const errorMessage = error.message || "Create folder error";
+        showToast(errorMessage, "error");
+        alert(errorMessage);
+      }
+    }
+
+    async function loadFolders() {
+      updateFolderUI();
+
+      foldersStatus.textContent = "Loading folders...";
+      foldersGrid.innerHTML = "";
+
+      try {
+        const res = await fetch("/folders?parent_id=" + encodeURIComponent(currentFolderId), {
+          headers: {
+            Authorization: "Bearer " + token,
+          },
+        });
+
+        const folders = await res.json().catch(() => []);
+
+        if (!res.ok) {
+          foldersStatus.textContent =
+            folders.message || folders.error || "Failed to load folders.";
+          return;
+        }
+
+        if (!Array.isArray(folders) || folders.length === 0) {
+          foldersStatus.textContent = "No folders here.";
+          return;
+        }
+
+        foldersStatus.textContent = "Folders loaded ✅";
+
+        folders.forEach((folder) => {
+          const card = document.createElement("div");
+          card.className = "file-card-ui folder-card";
+
+          const safeFolderName = String(folder.name || "")
+            .replace(/\\/g, "\\\\")
+            .replace(/'/g, "\\'");
+
+          card.innerHTML = `
+            <div class="file-icon-ui">📁</div>
+            <h3>${folder.name}</h3>
+            <p>Created: ${folder.created_date || ""}</p>
+
+            <div class="file-actions">
+              <button type="button" onclick="openFolder(${folder.id}, '${safeFolderName}')">
+                Open
+              </button>
+              <button type="button" class="delete" onclick="deleteFolder(${folder.id})">
+                Delete
+              </button>
+            </div>
+          `;
+
+          foldersGrid.appendChild(card);
+        });
+      } catch (error) {
+        console.error(error);
+        foldersStatus.textContent = "Folder load error.";
+      }
+    }
+
+    function openFolder(folderId, folderName) {
+      folderStack.push({
+        id: currentFolderId,
+        name: currentFolderName,
+      });
+
+      currentFolderId = String(folderId);
+      currentFolderName = folderName;
+
+      loadFolders();
+      loadFiles();
+    }
+
+    function goBackFolder() {
+      if (folderStack.length === 0) {
+        goRoot();
+        return;
+      }
+
+      const previous = folderStack.pop();
+
+      currentFolderId = previous.id;
+      currentFolderName = previous.name;
+
+      loadFolders();
+      loadFiles();
+    }
+
+    function goRoot() {
+      currentFolderId = "root";
+      currentFolderName = "Root";
+      folderStack = [];
+
+      loadFolders();
+      loadFiles();
+    }
+
+    async function deleteFolder(folderId) {
+      if (!confirm("Delete this folder? Files inside will go back to root.")) return;
+
+      try {
+        const res = await fetch("/folders/" + folderId, {
+          method: "DELETE",
+          headers: {
+            Authorization: "Bearer " + token,
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          showToast(data.message || data.error || "Delete folder failed", "error");
+          return;
+        }
+
+        showToast("✅ Folder deleted");
+        loadFolders();
+        loadFiles();
+      } catch (error) {
+        console.error(error);
+        showToast(error.message || "Delete folder error", "error");
+      }
+    }
+
     async function copyLink(filename) {
       const link = window.location.origin + "/files/share/" + filename;
 
@@ -161,79 +496,105 @@
       }
     }
 
-    async function shareFileToUser(fileId) {
-  try {
-    const usersRes = await fetch("/users/shareable", {
-      headers: {
-        Authorization: "Bearer " + token,
-      },
+    async function openShareModal(fileId) {
+      selectedShareFileId = fileId;
+      shareModal.style.display = "flex";
+      shareUserSelect.innerHTML = `<option value="">Loading users...</option>`;
+
+      try {
+        const usersRes = await fetch("/users/shareable", {
+          headers: {
+            Authorization: "Bearer " + token,
+          },
+        });
+
+        const users = await usersRes.json();
+
+        if (!usersRes.ok) {
+          showToast(users.message || "Failed to load users", "error");
+          closeShareModal();
+          return;
+        }
+
+        shareableUsers = users;
+
+        if (!Array.isArray(shareableUsers) || shareableUsers.length === 0) {
+          shareUserSelect.innerHTML = `<option value="">No users available</option>`;
+          return;
+        }
+
+        shareUserSelect.innerHTML = `
+          <option value="">Select user...</option>
+          ${shareableUsers
+            .map((u) => `
+              <option value="${u.email}">
+                ${u.name || "No name"} (${u.email})
+              </option>
+            `)
+            .join("")}
+        `;
+      } catch (error) {
+        console.error(error);
+        showToast("Failed to load users", "error");
+        closeShareModal();
+      }
+    }
+
+    function closeShareModal() {
+      selectedShareFileId = null;
+      shareUserSelect.innerHTML = `<option value="">Select user...</option>`;
+      shareModal.style.display = "none";
+    }
+
+    async function confirmShareFile() {
+      const email = shareUserSelect.value;
+
+      if (!selectedShareFileId) {
+        showToast("No file selected", "error");
+        return;
+      }
+
+      if (!email) {
+        showToast("Please select a user", "error");
+        return;
+      }
+
+      try {
+        const selectedUser = shareableUsers.find((u) => u.email === email);
+
+        const res = await fetch("/files/share", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + token,
+          },
+          body: JSON.stringify({
+            fileId: selectedShareFileId,
+            email,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          showToast(data.message || "Failed to share file", "error");
+          return;
+        }
+
+        showToast(`✅ Shared with ${selectedUser ? selectedUser.name : email}`);
+        closeShareModal();
+        loadSharedWithMe();
+      } catch (error) {
+        console.error(error);
+        showToast("Share failed", "error");
+      }
+    }
+
+    shareModal.addEventListener("click", function (event) {
+      if (event.target === shareModal) {
+        closeShareModal();
+      }
     });
-
-    const users = await usersRes.json();
-
-    if (!usersRes.ok) {
-      showToast("Failed to load users", "error");
-      return;
-    }
-
-    if (users.length === 0) {
-      showToast("No users available to share with", "error");
-      return;
-    }
-
-    const userList = users
-      .map((u, index) => `${index + 1}. ${u.name} (${u.email})`)
-      .join("\n");
-
-    const selected = prompt(
-      `Select user number:\n\n${userList}`
-    );
-
-    if (!selected) {
-      showToast("Share cancelled.", "error");
-      return;
-    }
-
-    const selectedIndex = Number(selected) - 1;
-
-    if (
-      isNaN(selectedIndex) ||
-      selectedIndex < 0 ||
-      selectedIndex >= users.length
-    ) {
-      showToast("Invalid selection", "error");
-      return;
-    }
-
-    const selectedUser = users[selectedIndex];
-
-    const res = await fetch("/files/share", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + token,
-      },
-      body: JSON.stringify({
-        fileId,
-        email: selectedUser.email,
-      }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      showToast(data.message || "Failed to share file", "error");
-      return;
-    }
-
-    showToast(
-      `✅ Shared with ${selectedUser.name}`
-    );
-  } catch (error) {
-    console.error(error);
-    showToast("Share failed", "error");
-  }
-}
 
     async function downloadFile(filename, originalName) {
       try {
@@ -249,17 +610,17 @@
         }
 
         const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
+        const downloadUrl = window.URL.createObjectURL(blob);
 
         const a = document.createElement("a");
-        a.href = url;
+        a.href = downloadUrl;
         a.download = originalName || decodeURIComponent(filename);
 
         document.body.appendChild(a);
         a.click();
 
         a.remove();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(downloadUrl);
 
         showToast("✅ Download started");
       } catch (error) {
@@ -277,7 +638,7 @@
       const sort = document.getElementById("sortOrder").value;
 
       const url =
-        `/api/admin/files?search=${search}&visibility=${visibility}&sort=${sort}`;
+        `/api/admin/files?search=${search}&visibility=${visibility}&sort=${sort}&folder_id=${encodeURIComponent(currentFolderId)}`;
 
       const res = await fetch(url, {
         headers: {
@@ -295,8 +656,8 @@
         return;
       }
 
-      if (files.length === 0) {
-        statusBox.textContent = "No files found.";
+      if (!Array.isArray(files) || files.length === 0) {
+        statusBox.textContent = "No files found in this folder.";
         return;
       }
 
@@ -304,11 +665,15 @@
 
       files.forEach((file) => {
         const encoded = encodeURIComponent(file.filename);
-        const safeOriginalName = (file.original_name || file.filename).replace(/'/g, "\\'");
+
+        const safeOriginalName = (file.original_name || file.filename)
+          .replace(/\\/g, "\\\\")
+          .replace(/'/g, "\\'");
 
         const canDelete =
           Number(file.user_id) === Number(user.id) ||
-          ["admin", "superadmin"].includes(user.role);
+          role === "admin" ||
+          role === "superadmin";
 
         const ownerText =
           Number(file.user_id) === Number(user.id)
@@ -341,7 +706,7 @@
                 : `<span style="font-size:12px;opacity:0.75;">🔒 No public link</span>`
             }
 
-            <button type="button" onclick="shareFileToUser(${file.id})">
+            <button type="button" onclick="openShareModal(${file.id})">
               🤝 Share to User
             </button>
 
@@ -374,7 +739,7 @@
         return;
       }
 
-      if (sharedFiles.length === 0) {
+      if (!Array.isArray(sharedFiles) || sharedFiles.length === 0) {
         sharedStatus.textContent = "No files shared with you yet.";
         return;
       }
@@ -383,7 +748,10 @@
 
       sharedFiles.forEach((file) => {
         const encoded = encodeURIComponent(file.filename);
-        const safeOriginalName = (file.original_name || file.filename).replace(/'/g, "\\'");
+
+        const safeOriginalName = (file.original_name || file.filename)
+          .replace(/\\/g, "\\\\")
+          .replace(/'/g, "\\'");
 
         const card = document.createElement("div");
         card.className = "file-card-ui";
@@ -458,6 +826,10 @@
       formData.append("file", selectedFile);
       formData.append("visibility", document.getElementById("visibilityInput").value);
 
+      if (currentFolderId !== "root") {
+        formData.append("folder_id", currentFolderId);
+      }
+
       const res = await fetch("/files/upload", {
         method: "POST",
         headers: {
@@ -480,6 +852,8 @@
       loadFiles();
     });
 
+    updateFolderUI();
+    loadFolders();
     loadFiles();
     loadSharedWithMe();
   </script>

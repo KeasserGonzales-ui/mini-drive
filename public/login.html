@@ -48,13 +48,23 @@
     const loginForm = document.getElementById("loginForm");
     const message = document.getElementById("message");
 
+    // clear old sessions
+    localStorage.clear();
+    sessionStorage.clear();
+
     loginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
 
       message.textContent = "Logging in...";
 
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
+      const email = document
+        .getElementById("email")
+        .value
+        .trim()
+        .toLowerCase();
+
+      const password =
+        document.getElementById("password").value;
 
       try {
         const response = await fetch("/auth/login", {
@@ -72,28 +82,67 @@
 
         const data = await response.json();
 
-        if (!data.token) {
-          message.textContent = data.message || "❌ Login failed";
+        console.log("LOGIN RESPONSE:", data);
+
+        if (!response.ok || !data.token || !data.user) {
+          message.textContent =
+            data.message || "❌ Invalid email or password";
+
           return;
         }
 
+        // normalize role
+        let role = String(data.user.role || "")
+          .trim()
+          .toLowerCase();
+
+        /*
+          FORCE THIS ACCOUNT AS NORMAL USER
+          temporary fix
+        */
+        if (email === "eassertest@gmail.com") {
+          role = "user";
+          data.user.role = "user";
+        }
+
+        // save auth
         localStorage.setItem("token", data.token);
-        localStorage.setItem("user", JSON.stringify(data.user));
+
+        localStorage.setItem(
+          "user",
+          JSON.stringify(data.user)
+        );
+
+        console.log("FINAL ROLE:", role);
 
         message.textContent = "✅ Login successful";
 
         setTimeout(() => {
-          if (
-            data.user.role === "superadmin" ||
-            data.user.role === "admin"
-          ) {
-            window.location.href = "/admin.html";
-          } else {
-            window.location.href = "/drive.html";
+
+          // forced user redirect
+          if (email === "eassertest@gmail.com") {
+            window.location.replace("/drive.html");
+            return;
           }
-        }, 500);
+
+          // admin redirect
+          if (
+            role === "admin" ||
+            role === "superadmin"
+          ) {
+            window.location.replace("/admin.html");
+          }
+
+          // normal user redirect
+          else {
+            window.location.replace("/drive.html");
+          }
+
+        }, 700);
+
       } catch (error) {
-        console.error(error);
+        console.error("LOGIN ERROR:", error);
+
         message.textContent = "❌ Server error";
       }
     });

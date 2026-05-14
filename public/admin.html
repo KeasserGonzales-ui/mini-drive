@@ -14,7 +14,6 @@
       <a href="/admin.html" class="active">📊 Dashboard</a>
       <a href="/drive.html">📁 Drive</a>
       <a href="#activityLogsPanel">🔐 Activity Logs</a>
-      <a href="/drive.html">⬅ Back to Drive</a>
       <button id="logoutBtn" type="button">🚪 Logout</button>
     </aside>
 
@@ -129,9 +128,7 @@
 
       <div class="panel" id="activityLogsPanel">
         <h2>🔐 Activity Logs</h2>
-        <div id="logsStatus" class="status">
-          Superadmin monitoring logs loading...
-        </div>
+        <div id="logsStatus" class="status">Superadmin monitoring logs loading...</div>
 
         <div class="form-row">
           <input type="text" id="logsSearchInput" placeholder="Search action, user, email, file, details..." />
@@ -179,9 +176,10 @@
       throw new Error("Not authorized");
     }
 
-    const { token, user } = auth;
+    const token = auth.token;
+    const user = auth.user;
 
-    checkTokenOrLogout();
+    checkAdminTokenOrLogout();
 
     const statusBox = document.getElementById("status");
     const fileStatus = document.getElementById("fileStatus");
@@ -208,9 +206,12 @@
     adminInfo.textContent =
       "Logged in as " + (user.name || user.email) + " | Role: " + user.role;
 
-    logoutBtn.onclick = function () {
-      logout();
-    };
+    logoutBtn.addEventListener("click", function () {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      sessionStorage.clear();
+      window.location.replace("/login.html");
+    });
 
     function showToast(message, type = "success") {
       toast.textContent = message;
@@ -287,7 +288,7 @@
     }
 
     async function copyShareLink(filename) {
-      const link = window.location.origin + "/share/" + filename;
+      const link = window.location.origin + "/files/share/" + filename;
 
       try {
         await navigator.clipboard.writeText(link);
@@ -313,7 +314,7 @@
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         showToast(data.message || "Failed to share file", "error");
@@ -326,20 +327,20 @@
 
     async function loadStats() {
       const res = await api("/api/admin/stats");
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         statusBox.textContent = data.message || data.error || "Failed to load stats";
         return;
       }
 
-      document.getElementById("totalUsers").textContent = data.totalUsers;
-      document.getElementById("totalFiles").textContent = data.totalFiles;
+      document.getElementById("totalUsers").textContent = data.totalUsers || 0;
+      document.getElementById("totalFiles").textContent = data.totalFiles || 0;
     }
 
     async function loadUsers() {
       const res = await api("/api/admin/users");
-      const users = await res.json();
+      const users = await res.json().catch(() => []);
 
       if (!res.ok) {
         statusBox.textContent = users.message || users.error || "Failed to load users";
@@ -347,6 +348,11 @@
       }
 
       usersTable.innerHTML = "";
+
+      if (!Array.isArray(users) || users.length === 0) {
+        statusBox.textContent = "No users found.";
+        return;
+      }
 
       users.forEach((u) => {
         const tr = document.createElement("tr");
@@ -394,7 +400,7 @@
         `/api/admin/files?search=${search}&visibility=${visibility}&sort=${sort}`
       );
 
-      const files = await res.json();
+      const files = await res.json().catch(() => []);
 
       if (!res.ok) {
         fileStatus.textContent = files.message || files.error || "Failed to load files";
@@ -403,7 +409,7 @@
 
       filesTable.innerHTML = "";
 
-      if (files.length === 0) {
+      if (!Array.isArray(files) || files.length === 0) {
         fileStatus.textContent = "No files found.";
         return;
       }
@@ -420,7 +426,7 @@
           <td>${getVisibilityBadge(file.visibility)}</td>
           <td>${getUploadedDate(file)}</td>
           <td>
-            <a href="/file/${encodedFile}?token=${token}" download>
+            <a href="/files/${encodedFile}?token=${token}" download>
               <button type="button">Download</button>
             </a>
 
@@ -464,9 +470,7 @@
           ${log.activity_date || ""}
         `.toLowerCase();
 
-        const matchesSearch = text.includes(search);
-
-        return matchesAction && matchesSearch;
+        return matchesAction && text.includes(search);
       });
 
       logsTable.innerHTML = "";
@@ -498,7 +502,7 @@
 
     async function loadActivityLogs() {
       const res = await api("/api/activity-logs");
-      const logs = await res.json();
+      const logs = await res.json().catch(() => []);
 
       if (!res.ok) {
         logsStatus.textContent = logs.message || logs.error || "Failed to load activity logs";
@@ -543,7 +547,7 @@
         body: JSON.stringify({ name, email, password }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         createStatus.textContent = data.message || data.error || "Failed to create user";
@@ -576,7 +580,7 @@
         body: JSON.stringify({ role }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         statusBox.textContent = data.message || data.error || "Role update failed";
@@ -600,7 +604,7 @@
         method: "DELETE",
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         statusBox.textContent = data.message || data.error || "Delete failed";
@@ -619,7 +623,7 @@
     async function deleteFile(filename) {
       if (!confirm("Delete this file?")) return;
 
-      const res = await fetch("/delete/" + filename, {
+      const res = await fetch("/files/delete/" + filename, {
         method: "DELETE",
         headers: {
           Authorization: "Bearer " + token,

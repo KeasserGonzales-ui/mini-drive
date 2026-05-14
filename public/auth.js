@@ -3,11 +3,16 @@ function getToken() {
 }
 
 function getUser() {
-  return JSON.parse(localStorage.getItem("user") || "{}");
+  try {
+    return JSON.parse(localStorage.getItem("user") || "{}");
+  } catch (error) {
+    return {};
+  }
 }
 
 function logout() {
-  localStorage.clear();
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
   window.location.replace("/login.html");
 }
 
@@ -22,28 +27,64 @@ function requireLogin() {
   return token;
 }
 
+function requireUser() {
+  const token = requireLogin();
+  const user = getUser();
+
+  if (!token) return null;
+
+  return { token, user };
+}
+
 function requireAdmin() {
   const token = requireLogin();
   const user = getUser();
 
-  if (!token) {
-    return null;
-  }
+  if (!token) return null;
 
-  if (user.role !== "admin" && user.role !== "superadmin") {
+  const role = String(user.role || "").toLowerCase();
+
+  if (role !== "admin" && role !== "superadmin") {
     alert("Admin access only");
-    logout();
+    window.location.replace("/drive.html");
     return null;
   }
 
   return { token, user };
 }
 
-function checkTokenOrLogout() {
+function checkUserTokenOrLogout() {
   const token = getToken();
 
   if (!token) {
     logout();
+    return;
+  }
+
+  fetch("/api/user/test", {
+    headers: {
+      Authorization: "Bearer " + token,
+    },
+  })
+    .then((res) => {
+      if (!res.ok) logout();
+    })
+    .catch(() => logout());
+}
+
+function checkAdminTokenOrLogout() {
+  const token = getToken();
+  const user = getUser();
+
+  if (!token) {
+    logout();
+    return;
+  }
+
+  const role = String(user.role || "").toLowerCase();
+
+  if (role !== "admin" && role !== "superadmin") {
+    window.location.replace("/drive.html");
     return;
   }
 
@@ -53,9 +94,7 @@ function checkTokenOrLogout() {
     },
   })
     .then((res) => {
-      if (!res.ok) {
-        logout();
-      }
+      if (!res.ok) logout();
     })
     .catch(() => logout());
 }
