@@ -357,9 +357,14 @@ exports.deleteFile = (req, res) => {
 };
 
 exports.getFiles = (req, res) => {
+  const search = req.query.search || "";
+
   db.query(
-    "SELECT * FROM files WHERE user_id = ? ORDER BY uploaded_at DESC",
-    [req.user.id],
+    `SELECT * FROM files 
+     WHERE user_id = ?
+     AND filename LIKE ?
+     ORDER BY uploaded_at DESC`,
+    [req.user.id, `%${search}%`],
     (err, rows) => {
       if (err) {
         console.error("Database error:", err);
